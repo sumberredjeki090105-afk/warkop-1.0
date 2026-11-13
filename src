@@ -1,0 +1,2941 @@
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+
+// ============================================================================
+// KONFIGURASI CLOUD REAL-TIME (ZERO-DEPENDENCY UNTUK GITHUB, VITE & VERCEL)
+// ============================================================================
+const DEFAULT_CLOUD_ROOM = 'warkop-sumber-redjeki-cibiru-v19';
+
+// ============================================================================
+// LOGO RESMI WARKOP SUMBER REDJEKI (生计来源) - RUKO RAOSEUN CIBIRU BANDUNG
+// ============================================================================
+const DEFAULT_WARKOP_LOGO = `data:image/svg+xml;utf8,${encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 360" width="600" height="360">
+  <rect width="600" height="360" fill="#FCFBF7" rx="14"/>
+  <rect x="24" y="24" width="552" height="312" fill="none" stroke="#8B1E1E" stroke-width="5"/>
+  <text x="300" y="112" text-anchor="middle" fill="#0F2547" font-family="Georgia, 'Times New Roman', serif" font-weight="900" font-size="48" letter-spacing="3">WARKOP</text>
+  <text x="300" y="178" text-anchor="middle" fill="#C81010" font-family="Georgia, 'Times New Roman', serif" font-weight="900" font-size="48" letter-spacing="1.5">SUMBER REDJEKI</text>
+  <text x="300" y="236" text-anchor="middle" fill="#0F2547" font-family="'Microsoft YaHei', 'SimHei', sans-serif" font-weight="700" font-size="34" letter-spacing="6">生计来源</text>
+  <text x="300" y="294" text-anchor="middle" fill="#8B1E1E" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="16" letter-spacing="3.5">RUKO RAOSEUN - CIBIRU - BANDUNG</text>
+</svg>
+`)}`;
+
+// ============================================================================
+// GENERATOR FILE PWA (MANIFEST.JSON, SERVICE-WORKER.JS, INDEX.HTML)
+// ============================================================================
+const getManifestJsonObject = () => ({
+  name: 'Warkop Sumber Redjeki - Kasir & Kontrol Stok',
+  short_name: 'Sumber Redjeki',
+  description: 'Aplikasi Kasir, Stok Opname, Resep Otomatis & Laba Rugi Warkop Sumber Redjeki Cibiru Bandung',
+  start_url: '/',
+  scope: '/',
+  display: 'standalone',
+  orientation: 'portrait',
+  background_color: '#110F0E',
+  theme_color: '#8B1E1E',
+  icons: [
+    {
+      src: '/icon-192x192.png',
+      sizes: '192x192',
+      type: 'image/png',
+      purpose: 'any maskable',
+    },
+    {
+      src: '/icon-512x512.png',
+      sizes: '512x512',
+      type: 'image/png',
+      purpose: 'any maskable',
+    },
+  ],
+});
+
+const SERVICE_WORKER_CODE = `// Service Worker Resmi Warkop Sumber Redjeki (PWA Offline-First)
+const CACHE_NAME = 'warkop-sumber-redjeki-cache-v1';
+const ASSETS_TO_CACHE = [
+  '/',
+  '/index.html',
+  '/manifest.json'
+];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS_TO_CACHE))
+  );
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(
+        keys.map((key) => {
+          if (key !== CACHE_NAME) return caches.delete(key);
+        })
+      )
+    )
+  );
+  self.clients.claim();
+});
+
+self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+  if (event.request.url.includes('ntfy.sh') || event.request.url.includes('script.google.com')) return;
+
+  event.respondWith(
+    fetch(event.request)
+      .then((networkResponse) => {
+        const responseClone = networkResponse.clone();
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(event.request, responseClone);
+        });
+        return networkResponse;
+      })
+      .catch(() => caches.match(event.request).then((cached) => cached || caches.match('/index.html')))
+  );
+});
+`;
+
+const INDEX_HTML_PWA_TEMPLATE = `<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#8B1E1E" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Sumber Redjeki" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/icon-192x192.png" />
+    <title>Warkop Sumber Redjeki - Sistem Kasir & Stok</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-[#110F0E] text-stone-100">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/service-worker.js')
+            .then((reg) => console.log('Service Worker terdaftar:', reg.scope))
+            .catch((err) => console.log('Service Worker gagal:', err));
+        });
+      }
+    </script>
+  </body>
+</html>`;
+
+// ============================================================================
+// MASTER DATA 50 MENU & BAHAN BAKU (SESUAI EXCEL: HPP WARKOP FIX.xlsx)
+// ============================================================================
+const buildInitialInventory = () => [
+  // --- A. MENU NASI (RACIKAN / CAMPURAN NO. 1 - 15) ---
+  { id: 1, no: 1, name: 'Nasi Telor', category: 'Menu Nasi (Racikan)', unit: 'Porsi', packCost: 0, baseUnitCost: 3100, cost: 3100, price: 10000, isMenuRacikan: true, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 0, targetStock: 0, recipe: [{ ingredientId: 101, qty: 1 }, { ingredientId: 102, qty: 1 }] },
+  { id: 2, no: 2, name: 'Nasi Telor Sosis', category: 'Menu Nasi (Racikan)', unit: 'Porsi', packCost: 0, baseUnitCost: 4100, cost: 4100, price: 12000, isMenuRacikan: true, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 0, targetStock: 0, recipe: [{ ingredientId: 101, qty: 1 }, { ingredientId: 102, qty: 1 }, { ingredientId: 103, qty: 1 }] },
+  { id: 3, no: 3, name: 'Nasi Telor Kornet', category: 'Menu Nasi (Racikan)', unit: 'Porsi', packCost: 0, baseUnitCost: 5500, cost: 5500, price: 14000, isMenuRacikan: true, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 0, targetStock: 0, recipe: [{ ingredientId: 101, qty: 1 }, { ingredientId: 102, qty: 1 }, { ingredientId: 104, qty: 1 }] },
+  { id: 4, no: 4, name: 'Nasi Omlet', category: 'Menu Nasi (Racikan)', unit: 'Porsi', packCost: 0, baseUnitCost: 6000, cost: 6000, price: 13000, isMenuRacikan: true, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 0, targetStock: 0, recipe: [{ ingredientId: 101, qty: 1 }, { ingredientId: 102, qty: 1 }, { ingredientId: 17, qty: 0.5 }] },
+  { id: 5, no: 5, name: 'Nasi Omlet Sosis', category: 'Menu Nasi (Racikan)', unit: 'Porsi', packCost: 0, baseUnitCost: 7000, cost: 7000, price: 14000, isMenuRacikan: true, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 0, targetStock: 0, recipe: [{ ingredientId: 101, qty: 1 }, { ingredientId: 102, qty: 1 }, { ingredientId: 17, qty: 0.5 }, { ingredientId: 103, qty: 1 }] },
+  { id: 6, no: 6, name: 'Nasi Omlet Nugget', category: 'Menu Nasi (Racikan)', unit: 'Porsi', packCost: 0, baseUnitCost: 7500, cost: 7500, price: 14000, isMenuRacikan: true, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 0, targetStock: 0, recipe: [{ ingredientId: 101, qty: 1 }, { ingredientId: 102, qty: 1 }, { ingredientId: 17, qty: 0.5 }, { ingredientId: 105, qty: 1 }] },
+  { id: 7, no: 7, name: 'Nasi Orak Arik', category: 'Menu Nasi (Racikan)', unit: 'Porsi', packCost: 0, baseUnitCost: 4000, cost: 4000, price: 11000, isMenuRacikan: true, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 0, targetStock: 0, recipe: [{ ingredientId: 101, qty: 1 }, { ingredientId: 102, qty: 1 }] },
+  { id: 8, no: 8, name: 'Nasi Orak Arik Telor', category: 'Menu Nasi (Racikan)', unit: 'Porsi', packCost: 0, baseUnitCost: 5000, cost: 5000, price: 13000, isMenuRacikan: true, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 0, targetStock: 0, recipe: [{ ingredientId: 101, qty: 1 }, { ingredientId: 102, qty: 2 }] },
+  { id: 9, no: 9, name: 'Nasi Orak Arik Sosis', category: 'Menu Nasi (Racikan)', unit: 'Porsi', packCost: 0, baseUnitCost: 5500, cost: 5500, price: 13000, isMenuRacikan: true, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 0, targetStock: 0, recipe: [{ ingredientId: 101, qty: 1 }, { ingredientId: 102, qty: 1 }, { ingredientId: 103, qty: 1 }] },
+  { id: 10, no: 10, name: 'Nasi Orak Arik Kornet', category: 'Menu Nasi (Racikan)', unit: 'Porsi', packCost: 0, baseUnitCost: 6000, cost: 6000, price: 14000, isMenuRacikan: true, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 0, targetStock: 0, recipe: [{ ingredientId: 101, qty: 1 }, { ingredientId: 102, qty: 1 }, { ingredientId: 104, qty: 1 }] },
+  { id: 11, no: 11, name: 'Nasi Orak Arik Omlet', category: 'Menu Nasi (Racikan)', unit: 'Porsi', packCost: 0, baseUnitCost: 8000, cost: 8000, price: 14000, isMenuRacikan: true, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 0, targetStock: 0, recipe: [{ ingredientId: 101, qty: 1 }, { ingredientId: 102, qty: 1 }, { ingredientId: 17, qty: 0.5 }] },
+  { id: 12, no: 12, name: 'Nasi Orak Arik Nugget', category: 'Menu Nasi (Racikan)', unit: 'Porsi', packCost: 0, baseUnitCost: 5500, cost: 5500, price: 14000, isMenuRacikan: true, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 0, targetStock: 0, recipe: [{ ingredientId: 101, qty: 1 }, { ingredientId: 102, qty: 1 }, { ingredientId: 105, qty: 1 }] },
+  { id: 13, no: 13, name: 'Nasi Goreng Telor', category: 'Menu Nasi (Racikan)', unit: 'Porsi', packCost: 0, baseUnitCost: 4000, cost: 4000, price: 13000, isMenuRacikan: true, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 0, targetStock: 0, recipe: [{ ingredientId: 101, qty: 1 }, { ingredientId: 102, qty: 1 }] },
+  { id: 14, no: 14, name: 'Nasi Goreng Sosis', category: 'Menu Nasi (Racikan)', unit: 'Porsi', packCost: 0, baseUnitCost: 4000, cost: 4000, price: 13000, isMenuRacikan: true, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 0, targetStock: 0, recipe: [{ ingredientId: 101, qty: 1 }, { ingredientId: 103, qty: 1 }] },
+  { id: 15, no: 15, name: 'Nasi Goreng Nugget', category: 'Menu Nasi (Racikan)', unit: 'Porsi', packCost: 0, baseUnitCost: 4500, cost: 4500, price: 13000, isMenuRacikan: true, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 0, targetStock: 0, recipe: [{ ingredientId: 101, qty: 1 }, { ingredientId: 105, qty: 1 }] },
+
+  // --- B. INDOMIE FISIK & MENU MIE CAMPURAN (NO. 16 - 23) ---
+  { id: 16, no: 16, name: 'Indomie Kuah', category: 'Stok Mie & Cemilan (Fisik)', unit: 'Bungkus', packCost: 114000, baseUnitCost: 2850, cost: 3000, price: 7000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 10, targetStock: 40, recipe: [] },
+  { id: 17, no: 17, name: 'Indomie Goreng', category: 'Stok Mie & Cemilan (Fisik)', unit: 'Bungkus', packCost: 118500, baseUnitCost: 2963, cost: 3000, price: 7000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 10, targetStock: 40, recipe: [] },
+  { id: 18, no: 18, name: 'Indomie Telor', category: 'Menu Mie (Racikan)', unit: 'Porsi', packCost: 0, baseUnitCost: 4500, cost: 4500, price: 10000, isMenuRacikan: true, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 0, targetStock: 0, recipe: [{ ingredientId: 17, qty: 1 }, { ingredientId: 102, qty: 1 }] },
+  { id: 19, no: 19, name: 'Indomie Sosis', category: 'Menu Mie (Racikan)', unit: 'Porsi', packCost: 0, baseUnitCost: 4000, cost: 4000, price: 12000, isMenuRacikan: true, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 0, targetStock: 0, recipe: [{ ingredientId: 17, qty: 1 }, { ingredientId: 103, qty: 1 }] },
+  { id: 20, no: 20, name: 'Indomie Kornet', category: 'Menu Mie (Racikan)', unit: 'Porsi', packCost: 0, baseUnitCost: 5500, cost: 5500, price: 12000, isMenuRacikan: true, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 0, targetStock: 0, recipe: [{ ingredientId: 17, qty: 1 }, { ingredientId: 104, qty: 1 }] },
+  { id: 21, no: 21, name: 'Indomie Special (Telor+Kornet)', category: 'Menu Mie (Racikan)', unit: 'Porsi', packCost: 0, baseUnitCost: 7500, cost: 7500, price: 15000, isMenuRacikan: true, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 0, targetStock: 0, recipe: [{ ingredientId: 17, qty: 1 }, { ingredientId: 102, qty: 1 }, { ingredientId: 104, qty: 1 }] },
+  { id: 22, no: 22, name: 'Mie Nyemek', category: 'Menu Mie (Racikan)', unit: 'Porsi', packCost: 0, baseUnitCost: 5500, cost: 5500, price: 11000, isMenuRacikan: true, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 0, targetStock: 0, recipe: [{ ingredientId: 16, qty: 1 }, { ingredientId: 102, qty: 1 }] },
+  { id: 23, no: 23, name: 'Indomie Cuankie', category: 'Menu Mie (Racikan)', unit: 'Porsi', packCost: 0, baseUnitCost: 7000, cost: 7000, price: 15000, isMenuRacikan: true, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 0, targetStock: 0, recipe: [{ ingredientId: 16, qty: 1 }] },
+
+  // --- C. CEMILAN & GORENGAN (NO. 24 - 27) ---
+  { id: 24, no: 24, name: 'Pempek', category: 'Stok Mie & Cemilan (Fisik)', unit: 'Porsi', packCost: 0, baseUnitCost: 0, cost: 0, price: 15000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 5, targetStock: 20, recipe: [] },
+  { id: 25, no: 25, name: 'Kentang Goreng', category: 'Stok Mie & Cemilan (Fisik)', unit: 'Porsi', packCost: 0, baseUnitCost: 0, cost: 0, price: 8000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 5, targetStock: 20, recipe: [] },
+  { id: 26, no: 26, name: 'Sosis Goreng (Per 4 Pcs)', category: 'Stok Mie & Cemilan (Fisik)', unit: 'Porsi', packCost: 16000, baseUnitCost: 667, cost: 2700, price: 8000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 5, targetStock: 20, recipe: [] },
+  { id: 27, no: 27, name: 'Otak Otak (Per 4 Pcs)', category: 'Stok Mie & Cemilan (Fisik)', unit: 'Porsi', packCost: 5000, baseUnitCost: 0, cost: 0, price: 8000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 5, targetStock: 20, recipe: [] },
+
+  // --- D. MINUMAN SASET & SEDUHAN (NO. 28 - 50) ---
+  { id: 28, no: 28, name: 'Es Teh Manis', category: 'Minuman Racikan (Josu/Teh)', unit: 'Gelas', packCost: 0, baseUnitCost: 1000, cost: 1000, price: 5000, isMenuRacikan: true, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 0, targetStock: 0, recipe: [] },
+  { id: 29, no: 29, name: 'Susu Bendera Putih', category: 'Stok Minuman Saset (Fisik)', unit: 'Saset', packCost: 8500, baseUnitCost: 1417, cost: 1500, price: 5000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 6, targetStock: 24, recipe: [] },
+  { id: 30, no: 30, name: 'Susu Bendera Coklat', category: 'Stok Minuman Saset (Fisik)', unit: 'Saset', packCost: 8500, baseUnitCost: 1417, cost: 1500, price: 5000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 6, targetStock: 24, recipe: [] },
+  { id: 31, no: 31, name: 'Energen', category: 'Stok Minuman Saset (Fisik)', unit: 'Saset', packCost: 20500, baseUnitCost: 2050, cost: 2200, price: 6000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 5, targetStock: 20, recipe: [] },
+  { id: 32, no: 32, name: 'Dancow Coklat', category: 'Stok Minuman Saset (Fisik)', unit: 'Saset', packCost: 37000, baseUnitCost: 3700, cost: 3800, price: 8000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 5, targetStock: 20, recipe: [] },
+  { id: 33, no: 33, name: 'Dancow Putih', category: 'Stok Minuman Saset (Fisik)', unit: 'Saset', packCost: 37000, baseUnitCost: 3700, cost: 3800, price: 8000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 5, targetStock: 20, recipe: [] },
+  { id: 34, no: 34, name: 'Milo', category: 'Stok Minuman Saset (Fisik)', unit: 'Saset', packCost: 19500, baseUnitCost: 1950, cost: 2100, price: 7000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 5, targetStock: 20, recipe: [] },
+  { id: 35, no: 35, name: 'Hillo', category: 'Stok Minuman Saset (Fisik)', unit: 'Saset', packCost: 21000, baseUnitCost: 2100, cost: 2200, price: 7000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 5, targetStock: 20, recipe: [] },
+  { id: 36, no: 36, name: 'Benk Benk Drink', category: 'Stok Minuman Saset (Fisik)', unit: 'Saset', packCost: 23000, baseUnitCost: 2300, cost: 2400, price: 7000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 5, targetStock: 20, recipe: [] },
+  { id: 37, no: 37, name: 'Chocolatos', category: 'Stok Minuman Saset (Fisik)', unit: 'Saset', packCost: 21000, baseUnitCost: 2100, cost: 2200, price: 7000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 5, targetStock: 20, recipe: [] },
+  { id: 38, no: 38, name: 'Good Day', category: 'Stok Minuman Saset (Fisik)', unit: 'Saset', packCost: 15000, baseUnitCost: 1500, cost: 1600, price: 5000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 5, targetStock: 20, recipe: [] },
+  { id: 39, no: 39, name: 'Good Day Freeze', category: 'Stok Minuman Saset (Fisik)', unit: 'Saset', packCost: 23000, baseUnitCost: 2300, cost: 2400, price: 7000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 5, targetStock: 20, recipe: [] },
+  { id: 40, no: 40, name: 'Abc Klepon', category: 'Stok Minuman Saset (Fisik)', unit: 'Saset', packCost: 21000, baseUnitCost: 2100, cost: 2200, price: 7000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 5, targetStock: 20, recipe: [] },
+  { id: 41, no: 41, name: 'Kapal Api Mix', category: 'Stok Minuman Saset (Fisik)', unit: 'Saset', packCost: 17000, baseUnitCost: 1700, cost: 1800, price: 5000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 5, targetStock: 20, recipe: [] },
+  { id: 42, no: 42, name: 'Indocafe Coffeemix', category: 'Stok Minuman Saset (Fisik)', unit: 'Saset', packCost: 22000, baseUnitCost: 2200, cost: 2300, price: 5000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 5, targetStock: 20, recipe: [] },
+  { id: 43, no: 43, name: 'Kopi Abc Susu', category: 'Stok Minuman Saset (Fisik)', unit: 'Saset', packCost: 17000, baseUnitCost: 1700, cost: 1800, price: 5000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 5, targetStock: 20, recipe: [] },
+  { id: 44, no: 44, name: 'Nutrisari', category: 'Stok Minuman Saset (Fisik)', unit: 'Saset', packCost: 14500, baseUnitCost: 1450, cost: 1550, price: 5000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 5, targetStock: 20, recipe: [] },
+  { id: 45, no: 45, name: 'Maxtea Teh Tarik', category: 'Stok Minuman Saset (Fisik)', unit: 'Saset', packCost: 23000, baseUnitCost: 2300, cost: 2400, price: 6000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 5, targetStock: 20, recipe: [] },
+  { id: 46, no: 46, name: 'Maxtea Lemon Tea', category: 'Stok Minuman Saset (Fisik)', unit: 'Saset', packCost: 15000, baseUnitCost: 1500, cost: 1600, price: 6000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 5, targetStock: 20, recipe: [] },
+  { id: 47, no: 47, name: 'Extra Joss (Murni)', category: 'Stok Minuman Saset (Fisik)', unit: 'Saset', packCost: 14500, baseUnitCost: 1209, cost: 1300, price: 6000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 6, targetStock: 24, recipe: [] },
+  { id: 48, no: 48, name: 'Kukubima (Murni)', category: 'Stok Minuman Saset (Fisik)', unit: 'Saset', packCost: 7500, baseUnitCost: 1250, cost: 1350, price: 6000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 6, targetStock: 24, recipe: [] },
+  { id: 49, no: 49, name: 'Extra Joss Susu (JOSU)', category: 'Minuman Racikan (Josu/Teh)', unit: 'Gelas', packCost: 0, baseUnitCost: 2700, cost: 2700, price: 7000, isMenuRacikan: true, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 0, targetStock: 0, recipe: [{ ingredientId: 47, qty: 1 }, { ingredientId: 29, qty: 1 }] },
+  { id: 50, no: 50, name: 'Kukubima Susu (KUSU)', category: 'Minuman Racikan (Josu/Teh)', unit: 'Gelas', packCost: 0, baseUnitCost: 2700, cost: 2700, price: 7000, isMenuRacikan: true, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 0, targetStock: 0, recipe: [{ ingredientId: 48, qty: 1 }, { ingredientId: 29, qty: 1 }] },
+
+  // --- E. STOK BAHAN BAKU DAPUR (UNTUK DIPOTONG OTOMATIS OLEH MENU NASI/MIE) ---
+  { id: 101, no: 51, name: 'Beras / Nasi Putih (Porsi Dapur)', category: 'Bahan Baku Dapur (Fisik)', unit: 'Porsi', packCost: 140000, baseUnitCost: 1500, cost: 1500, price: 4000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 10, targetStock: 50, recipe: [] },
+  { id: 102, no: 52, name: 'Telur Ayam Mentah (Bahan Dapur)', category: 'Bahan Baku Dapur (Fisik)', unit: 'Butir', packCost: 28000, baseUnitCost: 1600, cost: 1600, price: 3000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 10, targetStock: 45, recipe: [] },
+  { id: 103, no: 53, name: 'Sosis Satuan (Bahan Campuran)', category: 'Bahan Baku Dapur (Fisik)', unit: 'Pcs', packCost: 16000, baseUnitCost: 1000, cost: 1000, price: 2000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 10, targetStock: 40, recipe: [] },
+  { id: 104, no: 54, name: 'Kornet Sapi (Takaran Porsi)', category: 'Bahan Baku Dapur (Fisik)', unit: 'Porsi', packCost: 24000, baseUnitCost: 2400, cost: 2400, price: 4000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 5, targetStock: 20, recipe: [] },
+  { id: 105, no: 55, name: 'Nugget Ayam (Takaran Porsi)', category: 'Bahan Baku Dapur (Fisik)', unit: 'Porsi', packCost: 20000, baseUnitCost: 1500, cost: 1500, price: 3000, isMenuRacikan: false, soldCount: 0, stockStart: 0, stockIn: 0, stockWaste: 0, stockEnd: 0, minStock: 5, targetStock: 20, recipe: [] },
+];
+
+const INITIAL_WORKERS = [
+  { id: 1, name: 'Tatan', role: 'Penjaga Shift Pagi', dailyWage: 0 },
+  { id: 2, name: 'Rian', role: 'Penjaga Shift Malam', dailyWage: 0 },
+];
+
+const INITIAL_SINKING_FUNDS = [
+  { id: 1, name: 'Tabungan Sewa Ruko Raoseun Cibiru', dailyTarget: 50000, monthlyTarget: 1500000 },
+  { id: 2, name: 'Listrik Token, Air & Wi-Fi Warkop', dailyTarget: 25000, monthlyTarget: 750000 },
+  { id: 3, name: 'Cadangan Peremajaan Alat Dapur & Kasir', dailyTarget: 10000, monthlyTarget: 300000 },
+];
+
+const formatRp = (num) => {
+  const n = Number(num) || 0;
+  const isNeg = n < 0;
+  return `${isNeg ? 'Rp -' : 'Rp '}${Math.abs(Math.round(n)).toLocaleString('id-ID')}`;
+};
+
+const formatQty = (val) => {
+  const n = Math.round((Number(val) || 0) * 100) / 100;
+  return Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.0', '');
+};
+
+export default function App() {
+  // ==========================================================================
+  // STATE UTAMA APLIKASI
+  // ==========================================================================
+  const [role, setRole] = useState('worker'); // 'worker' | 'owner'
+  const [isOwnerUnlocked, setIsOwnerUnlocked] = useState(false);
+  const [ownerPin, setOwnerPin] = useState(() => localStorage.getItem('wsr_owner_pin_v19') || '1234');
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState('');
+
+  const [customLogo, setCustomLogo] = useState(() => localStorage.getItem('wsr_logo_v19') || DEFAULT_WARKOP_LOGO);
+  const [inventory, setInventory] = useState(() => {
+    try {
+      const saved = localStorage.getItem('wsr_inventory_v19');
+      return saved ? JSON.parse(saved) : buildInitialInventory();
+    } catch {
+      return buildInitialInventory();
+    }
+  });
+
+  const [previousShiftClosingMap, setPreviousShiftClosingMap] = useState(() => {
+    try {
+      const saved = localStorage.getItem('wsr_prev_closing_v19');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const [workers, setWorkers] = useState(() => {
+    try {
+      const saved = localStorage.getItem('wsr_workers_v19');
+      return saved ? JSON.parse(saved) : INITIAL_WORKERS;
+    } catch {
+      return INITIAL_WORKERS;
+    }
+  });
+
+  const [attendanceLogs, setAttendanceLogs] = useState(() => {
+    try {
+      const saved = localStorage.getItem('wsr_attendance_v19');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [sinkingFunds, setSinkingFunds] = useState(() => {
+    try {
+      const saved = localStorage.getItem('wsr_sinking_v19');
+      return saved ? JSON.parse(saved) : INITIAL_SINKING_FUNDS;
+    } catch {
+      return INITIAL_SINKING_FUNDS;
+    }
+  });
+
+  const [shiftHistory, setShiftHistory] = useState(() => {
+    try {
+      const saved = localStorage.getItem('wsr_shifts_v19');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // State Operasional Kasir
+  const [selectedWorker, setSelectedWorker] = useState('Tatan');
+  const [selectedShift, setSelectedShift] = useState('Shift Pagi (07:00 - 15:00)');
+  const [shiftDate, setShiftDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [actualCashInDrawer, setActualCashInDrawer] = useState(0);
+  const [qrisAmount, setQrisAmount] = useState(0);
+  const [pettyCashList, setPettyCashList] = useState([]);
+  const [pettyDesc, setPettyDesc] = useState('');
+  const [pettyAmount, setPettyAmount] = useState('');
+
+  // State Tampilan & Filter
+  const [kasirSubTab, setKasirSubTab] = useState('all'); // 'all' | 'racikan' | 'fisik' | 'setoran'
+  const [kasirViewMode, setKasirViewMode] = useState('cards'); // 'cards' | 'table'
+  const [ownerTab, setOwnerTab] = useState('tab1'); // 'tab1' | 'tab2' | 'tab3' | 'tab4' | 'all_mobile'
+  const [ownerViewMode, setOwnerViewMode] = useState('cards'); // 'cards' | 'table'
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('Semua');
+  const [topSellerPeriod, setTopSellerPeriod] = useState('weekly'); // 'current' | 'weekly' | 'monthly'
+
+  // State Modal Edit Menu & Resep
+  const [editingItem, setEditingItem] = useState(null);
+  const [showAddMenuModal, setShowAddMenuModal] = useState(false);
+  const [newMenuForm, setNewMenuForm] = useState({
+    name: '',
+    category: 'Stok Minuman Saset (Fisik)',
+    unit: 'Saset',
+    packCost: 0,
+    cost: 0,
+    price: 0,
+    isMenuRacikan: false,
+    minStock: 5,
+    targetStock: 20,
+    recipe: [],
+  });
+
+  // State Google Sheets & Cloud Sync
+  const [webhookUrl, setWebhookUrl] = useState(() => localStorage.getItem('wsr_webhook_v19') || '');
+  const [cloudRoom, setCloudRoom] = useState(() => localStorage.getItem('wsr_cloud_room_v19') || DEFAULT_CLOUD_ROOM);
+  const [syncStatus, setSyncStatus] = useState('Siap Sinkron');
+  const [lastSyncTime, setLastSyncTime] = useState('-');
+  const [showCloudModal, setShowCloudModal] = useState(false);
+  const [cloudTestResult, setCloudTestResult] = useState(null);
+
+  // State PWA
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [isPwaInstalled, setIsPwaInstalled] = useState(false);
+  const [showPwaModal, setShowPwaModal] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+
+  // State Form Absensi Manual di Tab 3
+  const [attForm, setAttForm] = useState({
+    workerName: 'Tatan',
+    date: new Date().toISOString().slice(0, 10),
+    shift: 'Shift Pagi',
+    status: 'Hadir',
+    deduction: 0,
+    note: '',
+  });
+  const [newWorkerForm, setNewWorkerForm] = useState({ name: '', role: 'Penjaga Shift', dailyWage: 0 });
+  const [newSinkingForm, setNewSinkingForm] = useState({ name: '', dailyTarget: 10000, monthlyTarget: 300000 });
+
+  const deviceIdRef = useRef(`dev_${Math.random().toString(36).slice(2, 8)}`);
+  const isApplyingRemoteRef = useRef(false);
+  const hasPulledInitialRef = useRef(false);
+
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(''), 3800);
+  };
+
+  // ==========================================================================
+  // INJEKSI OTOMATIS PWA (MANIFEST + SERVICE WORKER + BEFOREINSTALLPROMPT)
+  // ==========================================================================
+  useEffect(() => {
+    try {
+      // 1. Sematkan meta theme-color
+      let metaTheme = document.querySelector('meta[name="theme-color"]');
+      if (!metaTheme) {
+        metaTheme = document.createElement('meta');
+        metaTheme.name = 'theme-color';
+        document.head.appendChild(metaTheme);
+      }
+      metaTheme.content = '#8B1E1E';
+
+      // 2. Sematkan <link rel="manifest"> dinamis
+      let linkManifest = document.querySelector('link[rel="manifest"]');
+      if (!linkManifest) {
+        linkManifest = document.createElement('link');
+        linkManifest.rel = 'manifest';
+        const blobManifest = new Blob([JSON.stringify(getManifestJsonObject())], { type: 'application/json' });
+        linkManifest.href = URL.createObjectURL(blobManifest);
+        document.head.appendChild(linkManifest);
+      }
+
+      // 3. Registrasi Service Worker
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/service-worker.js').catch(() => {
+          const swBlob = new Blob([SERVICE_WORKER_CODE], { type: 'application/javascript' });
+          navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(() => {});
+        });
+      }
+
+      // 4. Deteksi jika sudah berjalan standalone
+      if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) {
+        setIsPwaInstalled(true);
+      }
+    } catch {
+      // Abaikan jika diblokir sandbox iframe
+    }
+
+    const handleBeforeInstall = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    const handleAppInstalled = () => {
+      setIsPwaInstalled(true);
+      setDeferredPrompt(null);
+      showToast('✅ Aplikasi Warkop Sumber Redjeki berhasil ter-install!');
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    window.addEventListener('appinstalled', handleAppInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  const handleInstallPwaClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+      }
+    } else {
+      setShowPwaModal(true);
+    }
+  };
+
+  // ==========================================================================
+  // PENYIMPANAN LOKAL OTOMATIS
+  // ==========================================================================
+  useEffect(() => {
+    localStorage.setItem('wsr_inventory_v19', JSON.stringify(inventory));
+  }, [inventory]);
+
+  useEffect(() => {
+    localStorage.setItem('wsr_prev_closing_v19', JSON.stringify(previousShiftClosingMap));
+  }, [previousShiftClosingMap]);
+
+  useEffect(() => {
+    localStorage.setItem('wsr_workers_v19', JSON.stringify(workers));
+  }, [workers]);
+
+  useEffect(() => {
+    localStorage.setItem('wsr_attendance_v19', JSON.stringify(attendanceLogs));
+  }, [attendanceLogs]);
+
+  useEffect(() => {
+    localStorage.setItem('wsr_sinking_v19', JSON.stringify(sinkingFunds));
+  }, [sinkingFunds]);
+
+  useEffect(() => {
+    localStorage.setItem('wsr_shifts_v19', JSON.stringify(shiftHistory));
+  }, [shiftHistory]);
+
+  useEffect(() => {
+    localStorage.setItem('wsr_owner_pin_v19', ownerPin);
+  }, [ownerPin]);
+
+  useEffect(() => {
+    localStorage.setItem('wsr_webhook_v19', webhookUrl);
+  }, [webhookUrl]);
+
+  useEffect(() => {
+    localStorage.setItem('wsr_cloud_room_v19', cloudRoom);
+  }, [cloudRoom]);
+
+  // ==========================================================================
+  // MESIN SINKRONISASI CLOUD KOMPRESI (< 2KB AGAR TEMBUS NTFY.SH INSTAN)
+  // ==========================================================================
+  const buildCompactCloudPacket = () => {
+    const compactInv = inventory.map((it) => [
+      it.id,
+      it.stockStart,
+      it.stockIn,
+      it.stockWaste,
+      it.stockEnd,
+      it.soldCount,
+      it.cost,
+      it.price,
+      it.packCost || 0,
+      it.minStock || 0,
+      it.targetStock || 0,
+      it.name,
+      it.recipe || [],
+    ]);
+    return {
+      v: 19,
+      ts: Date.now(),
+      dev: deviceIdRef.current,
+      inv: compactInv,
+      prv: previousShiftClosingMap,
+      wrk: workers,
+      att: attendanceLogs.slice(0, 40),
+      snk: sinkingFunds,
+      shf: shiftHistory.slice(0, 15),
+      csh: actualCashInDrawer,
+      qrs: qrisAmount,
+      pty: pettyCashList,
+    };
+  };
+
+  const applyCompactCloudPacket = (pkt) => {
+    if (!pkt || pkt.v !== 19) return false;
+    isApplyingRemoteRef.current = true;
+    try {
+      if (Array.isArray(pkt.inv)) {
+        setInventory((prev) => {
+          const mapById = new Map(pkt.inv.map((row) => [row[0], row]));
+          return prev.map((item) => {
+            const r = mapById.get(item.id);
+            if (!r) return item;
+            return {
+              ...item,
+              stockStart: Number(r[1]) || 0,
+              stockIn: Number(r[2]) || 0,
+              stockWaste: Number(r[3]) || 0,
+              stockEnd: Number(r[4]) || 0,
+              soldCount: Number(r[5]) || 0,
+              cost: Number(r[6]) || 0,
+              price: Number(r[7]) || 0,
+              packCost: Number(r[8]) || 0,
+              minStock: Number(r[9]) || 0,
+              targetStock: Number(r[10]) || 0,
+              name: r[11] || item.name,
+              recipe: Array.isArray(r[12]) ? r[12] : item.recipe,
+            };
+          });
+        });
+      }
+      if (pkt.prv) setPreviousShiftClosingMap(pkt.prv);
+      if (Array.isArray(pkt.wrk)) setWorkers(pkt.wrk);
+      if (Array.isArray(pkt.att)) setAttendanceLogs(pkt.att);
+      if (Array.isArray(pkt.snk)) setSinkingFunds(pkt.snk);
+      if (Array.isArray(pkt.shf)) setShiftHistory(pkt.shf);
+      if (pkt.csh !== undefined) setActualCashInDrawer(Number(pkt.csh) || 0);
+      if (pkt.qrs !== undefined) setQrisAmount(Number(pkt.qrs) || 0);
+      if (Array.isArray(pkt.pty)) setPettyCashList(pkt.pty);
+
+      setLastSyncTime(new Date().toLocaleTimeString('id-ID'));
+      setSyncStatus('Real-Time Cloud Aktif');
+      return true;
+    } finally {
+      setTimeout(() => {
+        isApplyingRemoteRef.current = false;
+      }, 400);
+    }
+  };
+
+  const pushToCloud = async (manual = false) => {
+    try {
+      setSyncStatus('Mengirim...');
+      const pkt = buildCompactCloudPacket();
+      const bodyStr = JSON.stringify(pkt);
+      const res = await fetch(`https://ntfy.sh/${encodeURIComponent(cloudRoom)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        body: bodyStr,
+      });
+      if (res.ok) {
+        setLastSyncTime(new Date().toLocaleTimeString('id-ID'));
+        setSyncStatus('Real-Time Cloud Aktif');
+        if (manual) showToast(`☁️ Data berhasil dikirim ke semua HP & Laptop (${bodyStr.length} bytes)!`);
+      } else {
+        setSyncStatus('Gagal Kirim');
+      }
+    } catch {
+      setSyncStatus('Mode Offline Lokal');
+    }
+  };
+
+  const pullFromCloudNow = async (manual = false) => {
+    try {
+      setSyncStatus('Menarik Data...');
+      const res = await fetch(`https://ntfy.sh/${encodeURIComponent(cloudRoom)}/json?poll=1&since=24h`);
+      if (!res.ok) throw new Error('Gagal tarik');
+      const text = await res.text();
+      const lines = text.trim().split('\n').filter(Boolean);
+      let latestPacket = null;
+      for (let i = lines.length - 1; i >= 0; i--) {
+        try {
+          const env = JSON.parse(lines[i]);
+          if (env && env.message) {
+            const parsed = JSON.parse(env.message);
+            if (parsed && parsed.v === 19) {
+              latestPacket = parsed;
+              break;
+            }
+          }
+        } catch {
+          // Lanjut baris berikutnya
+        }
+      }
+      hasPulledInitialRef.current = true;
+      if (latestPacket) {
+        applyCompactCloudPacket(latestPacket);
+        if (manual) showToast('📥 Data terbaru dari Cloud berhasil dimuat ke layar ini!');
+      } else {
+        setSyncStatus('Real-Time Cloud Aktif');
+        if (manual) showToast('ℹ️ Belum ada kiriman baru di Cloud Room ini.');
+      }
+    } catch {
+      hasPulledInitialRef.current = true;
+      setSyncStatus('Mode Offline Lokal');
+    }
+  };
+
+  useEffect(() => {
+    pullFromCloudNow(false);
+    let es = null;
+    try {
+      es = new EventSource(`https://ntfy.sh/${encodeURIComponent(cloudRoom)}/sse`);
+      es.onmessage = (evt) => {
+        try {
+          const env = JSON.parse(evt.data);
+          if (env && env.message) {
+            const pkt = JSON.parse(env.message);
+            if (pkt && pkt.v === 19 && pkt.dev !== deviceIdRef.current) {
+              applyCompactCloudPacket(pkt);
+            }
+          }
+        } catch {
+          // Abaikan pesan bukan JSON
+        }
+      };
+    } catch {
+      // Fallback polling
+    }
+    return () => {
+      if (es) es.close();
+    };
+  }, [cloudRoom]);
+
+  // Auto-push setiap perubahan setelah pull awal selesai
+  useEffect(() => {
+    if (!hasPulledInitialRef.current || isApplyingRemoteRef.current) return;
+    const timer = setTimeout(() => {
+      pushToCloud(false);
+    }, 900);
+    return () => clearTimeout(timer);
+  }, [inventory, workers, attendanceLogs, sinkingFunds, shiftHistory, actualCashInDrawer, qrisAmount, pettyCashList]);
+
+  // ==========================================================================
+  // KALKULASI RESEP OTOMATIS (AUTO-BOM), HPP, OMZET & AUDIT STOK
+  // ==========================================================================
+  const recipeUsageMap = useMemo(() => {
+    const usage = {};
+    inventory.forEach((item) => {
+      if (item.isMenuRacikan && (Number(item.soldCount) || 0) > 0 && Array.isArray(item.recipe)) {
+        const sold = Number(item.soldCount) || 0;
+        item.recipe.forEach((r) => {
+          const ingId = Number(r.ingredientId);
+          const qtyUsed = Math.round(sold * (Number(r.qty) || 0) * 100) / 100;
+          if (!usage[ingId]) usage[ingId] = { totalQty: 0, details: [] };
+          usage[ingId].totalQty = Math.round((usage[ingId].totalQty + qtyUsed) * 100) / 100;
+          usage[ingId].details.push(`${item.name} (${formatQty(qtyUsed)})`);
+        });
+      }
+    });
+    return usage;
+  }, [inventory]);
+
+  const menuRacikanList = useMemo(() => inventory.filter((i) => i.isMenuRacikan), [inventory]);
+  const physicalStockList = useMemo(() => inventory.filter((i) => !i.isMenuRacikan), [inventory]);
+
+  const shiftTotals = useMemo(() => {
+    let omzetRacikan = 0;
+    let hppRacikan = 0;
+    let omzetFisik = 0;
+    let hppFisik = 0;
+    const soldItemsBreakdown = [];
+
+    inventory.forEach((item) => {
+      if (item.isMenuRacikan) {
+        const sold = Math.max(0, Number(item.soldCount) || 0);
+        const rev = sold * (Number(item.price) || 0);
+        const cogs = sold * (Number(item.cost) || 0);
+        omzetRacikan += rev;
+        hppRacikan += cogs;
+        if (sold > 0) {
+          soldItemsBreakdown.push({
+            id: item.id,
+            name: item.name,
+            category: item.category,
+            sold,
+            revenue: rev,
+            cogs,
+            profit: rev - cogs,
+          });
+        }
+      } else {
+        const totalAvailable = (Number(item.stockStart) || 0) + (Number(item.stockIn) || 0) - (Number(item.stockWaste) || 0);
+        const usedInRecipe = recipeUsageMap[item.id]?.totalQty || 0;
+        const rawDepleted = Math.max(0, totalAvailable - (Number(item.stockEnd) || 0));
+        const directSold = Math.max(0, Math.round((rawDepleted - usedInRecipe) * 100) / 100);
+        const rev = directSold * (Number(item.price) || 0);
+        const cogs = directSold * (Number(item.cost) || 0);
+        omzetFisik += rev;
+        hppFisik += cogs;
+        if (directSold > 0) {
+          soldItemsBreakdown.push({
+            id: item.id,
+            name: item.name,
+            category: item.category,
+            sold: directSold,
+            revenue: rev,
+            cogs,
+            profit: rev - cogs,
+          });
+        }
+      }
+    });
+
+    const totalOmzet = omzetRacikan + omzetFisik;
+    const totalHpp = hppRacikan + hppFisik;
+    const grossProfit = totalOmzet - totalHpp;
+    const totalPettyCash = pettyCashList.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
+    const expectedCash = totalOmzet - totalPettyCash - (Number(qrisAmount) || 0);
+    const cashDiscrepancy = (Number(actualCashInDrawer) || 0) - expectedCash;
+
+    return {
+      omzetRacikan,
+      hppRacikan,
+      omzetFisik,
+      hppFisik,
+      totalOmzet,
+      totalHpp,
+      grossProfit,
+      totalPettyCash,
+      expectedCash,
+      cashDiscrepancy,
+      soldItemsBreakdown,
+    };
+  }, [inventory, recipeUsageMap, pettyCashList, qrisAmount, actualCashInDrawer]);
+
+  // Radar Manipulasi Stok Awal vs Stok Akhir Shift Sebelumnya
+  const tamperedItems = useMemo(() => {
+    return physicalStockList.filter((item) => {
+      const prevEnd = previousShiftClosingMap[item.id];
+      return prevEnd !== undefined && Number(item.stockStart) !== Number(prevEnd);
+    });
+  }, [physicalStockList, previousShiftClosingMap]);
+
+  // Radar Stok Menipis & Kalkulator Estimasi Belanja Kulakan Owner
+  const lowStockReport = useMemo(() => {
+    const items = physicalStockList
+      .filter((item) => (Number(item.minStock) || 0) > 0 && (Number(item.stockEnd) || 0) <= (Number(item.minStock) || 0))
+      .map((item) => {
+        const current = Number(item.stockEnd) || 0;
+        const target = Math.max(Number(item.targetStock) || 20, (Number(item.minStock) || 5) * 3);
+        const qtyToBuy = Math.max(1, Math.ceil(target - current));
+        const unitCost = Number(item.cost) || Number(item.baseUnitCost) || 0;
+        const estUnitTotal = qtyToBuy * unitCost;
+        const estPackTotal = (Number(item.packCost) || 0) > 0 ? Number(item.packCost) : estUnitTotal;
+        return {
+          ...item,
+          qtyToBuy,
+          unitCost,
+          estUnitTotal,
+          estPackTotal,
+        };
+      });
+
+    const totalEstUnit = items.reduce((s, i) => s + i.estUnitTotal, 0);
+    const totalEstPack = items.reduce((s, i) => s + i.estPackTotal, 0);
+    return { items, totalEstUnit, totalEstPack };
+  }, [physicalStockList]);
+
+  // ==========================================================================
+  // PERINGKAT TOP 5 MENU PENYUMBANG PROFIT TERBESAR (SHIFT INI / 7 HARI / 30 HARI)
+  // ==========================================================================
+  const topProfitMenus = useMemo(() => {
+    const mapAgg = new Map();
+    const addBreakdown = (list) => {
+      if (!Array.isArray(list)) return;
+      list.forEach((b) => {
+        const prev = mapAgg.get(b.name) || {
+          name: b.name,
+          category: b.category || '',
+          sold: 0,
+          revenue: 0,
+          cogs: 0,
+          profit: 0,
+        };
+        prev.sold = Math.round((prev.sold + (Number(b.sold) || 0)) * 100) / 100;
+        prev.revenue += Number(b.revenue) || 0;
+        prev.cogs += Number(b.cogs) || 0;
+        prev.profit += Number(b.profit) || 0;
+        mapAgg.set(b.name, prev);
+      });
+    };
+
+    // Selalu sertakan shift berjalan saat ini
+    addBreakdown(shiftTotals.soldItemsBreakdown);
+
+    if (topSellerPeriod === 'weekly') {
+      shiftHistory.slice(0, 14).forEach((s) => addBreakdown(s.soldItemsBreakdown));
+    } else if (topSellerPeriod === 'monthly') {
+      shiftHistory.slice(0, 60).forEach((s) => addBreakdown(s.soldItemsBreakdown));
+    }
+
+    const allSorted = Array.from(mapAgg.values()).sort((a, b) => b.profit - a.profit);
+    const totalProfitAll = allSorted.reduce((s, x) => s + Math.max(0, x.profit), 0) || 1;
+    const withShare = allSorted.map((x) => ({
+      ...x,
+      sharePct: Math.round((Math.max(0, x.profit) / totalProfitAll) * 100),
+    }));
+
+    const topFoods = withShare.filter((x) => !x.category.toLowerCase().includes('minuman')).slice(0, 5);
+    const topDrinks = withShare.filter((x) => x.category.toLowerCase().includes('minuman')).slice(0, 5);
+
+    return {
+      topOverall: withShare.slice(0, 5),
+      topFoods,
+      topDrinks,
+      totalProfitAll: allSorted.reduce((s, x) => s + x.profit, 0),
+    };
+  }, [shiftTotals.soldItemsBreakdown, shiftHistory, topSellerPeriod]);
+
+  // ==========================================================================
+  // REKAP GAJI & ABSENSI PEKERJA (TAB 3) + PEMBUKUAN 1 BULAN (TAB 4)
+  // ==========================================================================
+  const workerSummaryList = useMemo(() => {
+    return workers.map((w) => {
+      const logs = attendanceLogs.filter((l) => l.workerName === w.name);
+      const hadirLogs = logs.filter((l) => l.status === 'Hadir');
+      const alfaLogs = logs.filter((l) => l.status === 'Alfa');
+      const izinLogs = logs.filter((l) => l.status === 'Izin' || l.status === 'Sakit');
+
+      const totalGrossWage = hadirLogs.length * (Number(w.dailyWage) || 0);
+      const totalDeductions = logs.reduce((s, l) => s + (Number(l.deduction) || 0), 0);
+      const netWage = totalGrossWage - totalDeductions;
+
+      return {
+        ...w,
+        hadirCount: hadirLogs.length,
+        alfaCount: alfaLogs.length,
+        izinCount: izinLogs.length,
+        alfaDates: alfaLogs.map((a) => a.date),
+        izinDates: izinLogs.map((a) => `${a.date} (${a.status})`),
+        totalGrossWage,
+        totalDeductions,
+        netWage,
+      };
+    });
+  }, [workers, attendanceLogs]);
+
+  const monthlyBookkeeping = useMemo(() => {
+    const histOmzet = shiftHistory.reduce((s, h) => s + (Number(h.totalOmzet) || 0), 0);
+    const histHpp = shiftHistory.reduce((s, h) => s + (Number(h.totalHpp) || 0), 0);
+    const histPetty = shiftHistory.reduce((s, h) => s + (Number(h.totalPettyCash) || 0), 0);
+
+    const totalOmzet = histOmzet + shiftTotals.totalOmzet;
+    const totalHpp = histHpp + shiftTotals.totalHpp;
+    const grossProfit = totalOmzet - totalHpp;
+    const totalPettyCash = histPetty + shiftTotals.totalPettyCash;
+    const totalWorkerWages = workerSummaryList.reduce((s, w) => s + w.netWage, 0);
+    const totalSinkingMonthly = sinkingFunds.reduce((s, f) => s + (Number(f.monthlyTarget) || 0), 0);
+    const netProfit = grossProfit - totalPettyCash - totalWorkerWages - totalSinkingMonthly;
+
+    return {
+      totalOmzet,
+      totalHpp,
+      grossProfit,
+      totalPettyCash,
+      totalWorkerWages,
+      totalSinkingMonthly,
+      netProfit,
+    };
+  }, [shiftHistory, shiftTotals, workerSummaryList, sinkingFunds]);
+
+  // ==========================================================================
+  // HANDLER UPDATE MENU RACIKAN (+1 LAKU OTOMATIS POTONG STOK BAHAN BAKU)
+  // ==========================================================================
+  const handleAdjustMenuRacikanSold = (menuId, delta) => {
+    setInventory((prev) => {
+      const targetMenu = prev.find((i) => i.id === menuId);
+      if (!targetMenu) return prev;
+      const oldSold = Number(targetMenu.soldCount) || 0;
+      const newSold = Math.max(0, oldSold + delta);
+      if (newSold === oldSold) return prev;
+
+      const updatedMenus = prev.map((it) => (it.id === menuId ? { ...it, soldCount: newSold } : it));
+
+      // Hitung ulang total pemakaian bahan baku dari seluruh menu racikan
+      const newUsage = {};
+      updatedMenus.forEach((m) => {
+        if (m.isMenuRacikan && (Number(m.soldCount) || 0) > 0 && Array.isArray(m.recipe)) {
+          m.recipe.forEach((r) => {
+            const ingId = Number(r.ingredientId);
+            newUsage[ingId] = Math.round(((newUsage[ingId] || 0) + m.soldCount * (Number(r.qty) || 0)) * 100) / 100;
+          });
+        }
+      });
+
+      // Potong otomatis stok akhir bahan baku yang bersangkutan
+      const affectedIds = new Set((targetMenu.recipe || []).map((r) => Number(r.ingredientId)));
+      return updatedMenus.map((it) => {
+        if (!it.isMenuRacikan && affectedIds.has(it.id)) {
+          const avail = (Number(it.stockStart) || 0) + (Number(it.stockIn) || 0) - (Number(it.stockWaste) || 0);
+          const used = newUsage[it.id] || 0;
+          const newEnd = Math.max(0, Math.round((avail - used) * 100) / 100);
+          return { ...it, stockEnd: newEnd };
+        }
+        return it;
+      });
+    });
+  };
+
+  // Handler Update Stok Fisik
+  const handlePhysicalStockChange = (itemId, field, rawValue) => {
+    const cleanVal = String(rawValue).replace(',', '.');
+    const numVal = Math.max(0, parseFloat(cleanVal) || 0);
+    setInventory((prev) =>
+      prev.map((it) => {
+        if (it.id !== itemId) return it;
+        const updated = { ...it, [field]: numVal };
+        if (field === 'stockStart' || field === 'stockIn' || field === 'stockWaste') {
+          const avail = (Number(updated.stockStart) || 0) + (Number(updated.stockIn) || 0) - (Number(updated.stockWaste) || 0);
+          const usedInRecipe = recipeUsageMap[itemId]?.totalQty || 0;
+          updated.stockEnd = Math.max(0, Math.round((avail - usedInRecipe) * 100) / 100);
+        }
+        return updated;
+      })
+    );
+  };
+
+  // Handler Tutup Shift & Kunci Siklus Stok ke Shift Berikutnya
+  const handleCloseShiftAndCarryOver = () => {
+    const newSnapshot = {
+      id: Date.now(),
+      date: shiftDate,
+      time: new Date().toLocaleTimeString('id-ID'),
+      worker: selectedWorker,
+      shift: selectedShift,
+      totalOmzet: shiftTotals.totalOmzet,
+      totalHpp: shiftTotals.totalHpp,
+      grossProfit: shiftTotals.grossProfit,
+      totalPettyCash: shiftTotals.totalPettyCash,
+      qrisAmount: Number(qrisAmount) || 0,
+      actualCash: Number(actualCashInDrawer) || 0,
+      cashDiscrepancy: shiftTotals.cashDiscrepancy,
+      soldItemsBreakdown: shiftTotals.soldItemsBreakdown,
+    };
+
+    const nextClosingMap = {};
+    physicalStockList.forEach((it) => {
+      nextClosingMap[it.id] = Number(it.stockEnd) || 0;
+    });
+
+    setShiftHistory((prev) => [newSnapshot, ...prev]);
+    setPreviousShiftClosingMap(nextClosingMap);
+
+    // Catat otomatis hadir untuk penjaga shift
+    setAttendanceLogs((prev) => [
+      {
+        id: Date.now() + 1,
+        workerName: selectedWorker,
+        date: shiftDate,
+        shift: selectedShift,
+        status: 'Hadir',
+        deduction: 0,
+        note: `Tutup Shift Omzet ${formatRp(shiftTotals.totalOmzet)}`,
+      },
+      ...prev,
+    ]);
+
+    // Pindahkan Stok Akhir menjadi Stok Awal shift baru & 0-kan terjual racikan
+    setInventory((prev) =>
+      prev.map((it) => {
+        if (it.isMenuRacikan) {
+          return { ...it, soldCount: 0 };
+        }
+        const carry = Number(it.stockEnd) || 0;
+        return {
+          ...it,
+          stockStart: carry,
+          stockIn: 0,
+          stockWaste: 0,
+          stockEnd: carry,
+        };
+      })
+    );
+
+    setPettyCashList([]);
+    setActualCashInDrawer(0);
+    setQrisAmount(0);
+    showToast('✅ Shift berhasil ditutup! Stok Akhir otomatis dikunci menjadi Stok Awal shift berikutnya.');
+  };
+
+  // Handler Kirim Pembukuan 1 Bulan ke Google Sheets
+  const handleSendToGoogleSheets = async () => {
+    const payload = {
+      periode: new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }),
+      tanggalTutup: new Date().toLocaleString('id-ID'),
+      totalOmzet: monthlyBookkeeping.totalOmzet,
+      totalHPP: monthlyBookkeeping.totalHpp,
+      labaKotor: monthlyBookkeeping.grossProfit,
+      totalBelanjaKasir: monthlyBookkeeping.totalPettyCash,
+      totalGaji: monthlyBookkeeping.totalWorkerWages,
+      bebanSewaRuko: monthlyBookkeeping.totalSinkingMonthly,
+      totalSinkingFund: monthlyBookkeeping.totalSinkingMonthly,
+      totalPengeluaran:
+        monthlyBookkeeping.totalHpp +
+        monthlyBookkeeping.totalPettyCash +
+        monthlyBookkeeping.totalWorkerWages +
+        monthlyBookkeeping.totalSinkingMonthly,
+      profitBersih: monthlyBookkeeping.netProfit,
+    };
+
+    if (webhookUrl && webhookUrl.trim().startsWith('http')) {
+      try {
+        await fetch(webhookUrl.trim(), {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        showToast('🚀 Data Pembukuan 1 Bulan berhasil dikirim ke Google Sheets Anda!');
+        return;
+      } catch {
+        // Fallback ke CSV jika gagal
+      }
+    }
+
+    // Unduh CSV jika URL belum diisi
+    const csvRows = [
+      ['POS PEMBUKUAN 1 BULAN WARKOP SUMBER REDJEKI', 'NOMINAL (RP)'],
+      ['Total Pemasukan / Omzet', monthlyBookkeeping.totalOmzet],
+      ['Total Modal HPP Bahan Baku', monthlyBookkeeping.totalHpp],
+      ['Laba Kotor (Gross Profit)', monthlyBookkeeping.grossProfit],
+      ['Pengeluaran Kasir (Petty Cash)', monthlyBookkeeping.totalPettyCash],
+      ['Total Gaji Pekerja', monthlyBookkeeping.totalWorkerWages],
+      ['Total Beban Ruko, Listrik & Sinking Fund', monthlyBookkeeping.totalSinkingMonthly],
+      ['PROFIT BERSIH (NET PROFIT)', monthlyBookkeeping.netProfit],
+    ];
+    const csvContent = csvRows.map((r) => r.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `Pembukuan_Warkop_Sumber_Redjeki_${shiftDate}.csv`;
+    a.click();
+    showToast('📥 File CSV Pembukuan 1 Bulan berhasil diunduh (bisa langsung dibuka di Google Sheets/Excel)!');
+  };
+
+  // ==========================================================================
+  // RENDER UI APLIKASI
+  // ==========================================================================
+  return (
+    <div className="min-h-screen bg-[#110F0E] text-stone-100 font-sans pb-20">
+      {/* NOTIFIKASI TOAST */}
+      {toastMessage && (
+        <div className="fixed bottom-5 right-5 z-50 max-w-md bg-emerald-950 border-2 border-emerald-400 text-emerald-100 px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3">
+          <span className="text-lg">✨</span>
+          <span className="text-xs sm:text-sm font-bold leading-snug">{toastMessage}</span>
+        </div>
+      )}
+
+      {/* HEADER UTAMA */}
+      <header className="sticky top-0 z-30 bg-[#181412]/95 backdrop-blur-md border-b border-red-900/40 px-3 sm:px-6 py-3">
+        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+          {/* Logo & Identitas Warkop */}
+          <div className="flex items-center gap-3">
+            <img
+              src={customLogo}
+              alt="Logo Warkop Sumber Redjeki"
+              className="h-12 sm:h-14 w-auto rounded-lg border border-red-800/60 shadow-md bg-[#FCFBF7] object-contain"
+            />
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-base sm:text-xl font-black tracking-wider text-amber-400 uppercase">
+                  WARKOP SUMBER REDJEKI
+                </h1>
+                <span className="text-xs font-bold px-2 py-0.5 rounded bg-red-900/60 text-amber-200 border border-red-700/50">
+                  生计来源
+                </span>
+              </div>
+              <p className="text-[11px] text-stone-400">
+                Ruko Raoseun - Cibiru - Bandung • Siklus Stok Terkunci & Cloud Real-Time
+              </p>
+            </div>
+          </div>
+
+          {/* Tombol Aksi Cloud, PWA & Switcher Kasir / Owner */}
+          <div className="flex items-center flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleInstallPwaClick}
+              className="px-3 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md flex items-center gap-1.5"
+            >
+              <span>📲</span>
+              <span>{isPwaInstalled ? 'File PWA & GitHub' : 'Install Aplikasi'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => pullFromCloudNow(true)}
+              className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-stone-800 hover:bg-stone-700 text-cyan-300 border border-cyan-500/30"
+            >
+              📥 Tarik Data Cloud
+            </button>
+
+            <button
+              type="button"
+              onClick={() => pushToCloud(true)}
+              className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-stone-800 hover:bg-stone-700 text-amber-300 border border-amber-500/30"
+            >
+              ☁️ Kirim ke Semua HP
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowCloudModal(true)}
+              className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-500/40"
+            >
+              🟢 {syncStatus} ({lastSyncTime})
+            </button>
+
+            {/* Switcher Role */}
+            <div className="flex bg-stone-900 p-1 rounded-xl border border-stone-700">
+              <button
+                type="button"
+                onClick={() => setRole('worker')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition ${
+                  role === 'worker' ? 'bg-amber-500 text-stone-950 shadow' : 'text-stone-400 hover:text-stone-200'
+                }`}
+              >
+                👨‍🍳 Kasir HP
+              </button>
+              <button
+                type="button"
+                onClick={() => setRole('owner')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition ${
+                  role === 'owner' ? 'bg-red-800 text-amber-200 shadow' : 'text-stone-400 hover:text-stone-200'
+                }`}
+              >
+                👑 Owner / Admin
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* ==================================================================== */}
+      {/* PORTAL 1: KASIR HP (HPP & KEUNTUNGAN DISEMBUNYIKAN 100%)              */}
+      {/* ==================================================================== */}
+      {role === 'worker' && (
+        <main className="max-w-7xl mx-auto px-3 sm:px-6 pt-5 space-y-6">
+          {/* Bar Info Penjaga Shift & Ringkasan Omzet Kasir (Tanpa HPP/Laba) */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="bg-[#1A1614] border border-stone-800 rounded-2xl p-4 space-y-3">
+              <h2 className="text-xs font-black uppercase tracking-wider text-amber-400">
+                👨‍🍳 Identitas Penjaga Shift Kasir
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div>
+                  <label className="text-[10px] text-stone-400 block mb-1">Nama Kasir / Penjaga</label>
+                  <select
+                    value={selectedWorker}
+                    onChange={(e) => setSelectedWorker(e.target.value)}
+                    className="w-full bg-stone-900 border border-stone-700 rounded-xl px-2.5 py-2 text-xs font-bold text-stone-100"
+                  >
+                    {workers.map((w) => (
+                      <option key={w.id} value={w.name}>
+                        {w.name} ({w.role})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-stone-400 block mb-1">Jadwal Shift</label>
+                  <select
+                    value={selectedShift}
+                    onChange={(e) => setSelectedShift(e.target.value)}
+                    className="w-full bg-stone-900 border border-stone-700 rounded-xl px-2.5 py-2 text-xs font-bold text-stone-100"
+                  >
+                    <option value="Shift Pagi (07:00 - 15:00)">Shift Pagi (07:00 - 15:00)</option>
+                    <option value="Shift Sore/Malam (15:00 - 23:00)">Shift Sore/Malam (15:00 - 23:00)</option>
+                    <option value="Shift Full Day">Shift Full Day</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-stone-400 block mb-1">Tanggal Operasional</label>
+                  <input
+                    type="date"
+                    value={shiftDate}
+                    onChange={(e) => setShiftDate(e.target.value)}
+                    className="w-full bg-stone-900 border border-stone-700 rounded-xl px-2.5 py-2 text-xs font-bold text-stone-100"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-[#1A1614] border border-stone-800 rounded-2xl p-3.5">
+                <span className="text-[10px] text-stone-400 uppercase font-bold block">Omzet Menu Racikan</span>
+                <span className="text-base sm:text-lg font-black text-amber-400 mt-1 block">
+                  {formatRp(shiftTotals.omzetRacikan)}
+                </span>
+                <span className="text-[10px] text-stone-500">Nasi, Mie Olahan & Josu</span>
+              </div>
+              <div className="bg-[#1A1614] border border-stone-800 rounded-2xl p-3.5">
+                <span className="text-[10px] text-stone-400 uppercase font-bold block">Omzet Barang Fisik</span>
+                <span className="text-base sm:text-lg font-black text-cyan-400 mt-1 block">
+                  {formatRp(shiftTotals.omzetFisik)}
+                </span>
+                <span className="text-[10px] text-stone-500">Saset Murni & Cemilan</span>
+              </div>
+              <div className="bg-[#1A1614] border border-emerald-500/30 rounded-2xl p-3.5">
+                <span className="text-[10px] text-emerald-300 uppercase font-bold block">Total Omzet Shift</span>
+                <span className="text-base sm:text-lg font-black text-emerald-400 mt-1 block">
+                  {formatRp(shiftTotals.totalOmzet)}
+                </span>
+                <span className="text-[10px] text-stone-500">Total Penjualan Kotor</span>
+              </div>
+              <div className="bg-[#1A1614] border border-amber-500/30 rounded-2xl p-3.5">
+                <span className="text-[10px] text-amber-300 uppercase font-bold block">Wajib Setor Tunai</span>
+                <span className="text-base sm:text-lg font-black text-amber-300 mt-1 block">
+                  {formatRp(shiftTotals.expectedCash)}
+                </span>
+                <span className="text-[10px] text-stone-500">Omzet - Belanja - QRIS</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Navigasi Sub-Tab Kasir */}
+          <div className="flex flex-wrap items-center justify-between gap-2 bg-[#1A1614] p-2.5 rounded-2xl border border-stone-800">
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { id: 'all', label: '📱 Semua ke Bawah (1 Halaman HP)' },
+                { id: 'racikan', label: '🍳 1. Menu Racikan (+1 Laku Potong Bahan)' },
+                { id: 'fisik', label: '📦 2. Stok Fisik Etalase & Dapur' },
+                { id: 'setoran', label: '💰 3. Belanja Kasir & Tutup Shift' },
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setKasirSubTab(t.id)}
+                  className={`px-3 py-2 rounded-xl text-xs font-black transition ${
+                    kasirSubTab === t.id
+                      ? 'bg-red-800 text-amber-200 border border-amber-400/50 shadow'
+                      : 'bg-stone-900 text-stone-400 hover:text-stone-200'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="🔍 Cari menu / barang..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="bg-stone-900 border border-stone-700 rounded-xl px-3 py-1.5 text-xs text-stone-100"
+              />
+              <div className="flex bg-stone-900 p-1 rounded-xl border border-stone-700">
+                <button
+                  type="button"
+                  onClick={() => setKasirViewMode('cards')}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${
+                    kasirViewMode === 'cards' ? 'bg-amber-500 text-stone-950' : 'text-stone-400'
+                  }`}
+                >
+                  📱 Kartu HP
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setKasirViewMode('table')}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${
+                    kasirViewMode === 'table' ? 'bg-amber-500 text-stone-950' : 'text-stone-400'
+                  }`}
+                >
+                  💻 Tabel
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* BAGIAN 1 KASIR: MENU RACIKAN / CAMPURAN (KLIK +1 LAKU OTOMATIS POTONG STOK FISIK) */}
+          {(kasirSubTab === 'all' || kasirSubTab === 'racikan') && (
+            <section className="bg-[#1A1614] border border-stone-800 rounded-2xl p-4 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-amber-400">
+                    🍳 1. Menu Masakan & Minuman Racikan (Nasi Campur, Omlet, Indomie Olahan & Josu)
+                  </h3>
+                  <p className="text-xs text-stone-400">
+                    Kasir cukup klik <b>+1 Laku</b> setiap ada pesanan. Stok fisik Telur, Nasi, Mie, Kornet, Extra Joss & Susu di bawah akan terpotong otomatis!
+                  </p>
+                </div>
+                <span className="text-xs font-black px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                  Subtotal Menu Racikan: {formatRp(shiftTotals.omzetRacikan)}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {menuRacikanList
+                  .filter((m) => m.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                  .map((menu) => {
+                    const sold = Number(menu.soldCount) || 0;
+                    const omzetItem = sold * (Number(menu.price) || 0);
+                    return (
+                      <div
+                        key={menu.id}
+                        className={`p-3.5 rounded-2xl border transition ${
+                          sold > 0
+                            ? 'bg-amber-950/20 border-amber-500/50'
+                            : 'bg-stone-900/90 border-stone-800'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <span className="text-[10px] font-bold text-stone-400">#{menu.no} • {menu.category}</span>
+                            <h4 className="text-sm font-black text-stone-100">{menu.name}</h4>
+                            <span className="text-xs font-extrabold text-emerald-400">
+                              Harga Jual: {formatRp(menu.price)} / {menu.unit}
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[10px] text-stone-400 block">Omzet</span>
+                            <span className="text-xs font-black text-amber-300">{formatRp(omzetItem)}</span>
+                          </div>
+                        </div>
+
+                        {/* Info Resep Pemotongan Otomatis */}
+                        {Array.isArray(menu.recipe) && menu.recipe.length > 0 && (
+                          <div className="mt-2 text-[10px] text-stone-400 bg-stone-950/80 px-2.5 py-1.5 rounded-xl border border-stone-800">
+                            🔄 Auto-Potong:{' '}
+                            {menu.recipe
+                              .map((r) => {
+                                const ing = inventory.find((i) => i.id === Number(r.ingredientId));
+                                return ing ? `${formatQty(r.qty)} ${ing.name}` : '';
+                              })
+                              .filter(Boolean)
+                              .join(' + ')}
+                          </div>
+                        )}
+
+                        <div className="mt-3 flex items-center justify-between gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleAdjustMenuRacikanSold(menu.id, -1)}
+                            className="px-3 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 font-black text-xs"
+                          >
+                            -1 Batal
+                          </button>
+                          <div className="text-center">
+                            <span className="text-base font-black text-amber-300">{sold}</span>
+                            <span className="text-[10px] text-stone-400 block">{menu.unit} Laku</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleAdjustMenuRacikanSold(menu.id, 1)}
+                            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow"
+                          >
+                            +1 Laku
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </section>
+          )}
+
+          {/* BAGIAN 2 KASIR: STOK OPNAME FISIK ETALASE & DAPUR (TANPA HPP & KEUNTUNGAN) */}
+          {(kasirSubTab === 'all' || kasirSubTab === 'fisik') && (
+            <section className="bg-[#1A1614] border border-stone-800 rounded-2xl p-4 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-cyan-300">
+                    📦 2. Tabel Stok Fisik Etalase & Bahan Dapur (Indomie, Kopi Saset, Susu, Telur, Beras, Kornet)
+                  </h3>
+                  <p className="text-xs text-stone-400">
+                    Hitung sisa fisik barang di rak saat tutup shift. Bahan yang sudah dipakai untuk Menu Racikan di atas otomatis terhitung!
+                  </p>
+                </div>
+                <span className="text-xs font-black px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                  Omzet Murni Barang Fisik: {formatRp(shiftTotals.omzetFisik)}
+                </span>
+              </div>
+
+              {kasirViewMode === 'cards' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {physicalStockList
+                    .filter((item) => item.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                    .map((item) => {
+                      const usedInRecipe = recipeUsageMap[item.id]?.totalQty || 0;
+                      const avail = (Number(item.stockStart) || 0) + (Number(item.stockIn) || 0) - (Number(item.stockWaste) || 0);
+                      const rawDepleted = Math.max(0, avail - (Number(item.stockEnd) || 0));
+                      const directSold = Math.max(0, Math.round((rawDepleted - usedInRecipe) * 100) / 100);
+                      const omzetDirect = directSold * (Number(item.price) || 0);
+
+                      return (
+                        <div key={item.id} className="bg-stone-900/90 border border-stone-800 rounded-2xl p-3.5 space-y-2.5">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <span className="text-[10px] text-stone-400">#{item.no} • {item.category}</span>
+                              <h4 className="text-sm font-black text-stone-100">{item.name}</h4>
+                              <span className="text-xs font-bold text-emerald-400">
+                                Harga Jual: {formatRp(item.price)} / {item.unit}
+                              </span>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-[10px] text-stone-400 block">Laku Murni: {formatQty(directSold)}</span>
+                              <span className="text-xs font-black text-cyan-300">{formatRp(omzetDirect)}</span>
+                            </div>
+                          </div>
+
+                          {usedInRecipe > 0 && (
+                            <div className="text-[10px] bg-cyan-950/60 border border-cyan-500/40 text-cyan-200 px-2.5 py-1.5 rounded-xl font-bold">
+                              🔄 Terpakai di Menu Racikan: {formatQty(usedInRecipe)} {item.unit} ({recipeUsageMap[item.id].details.join(', ')})
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-4 gap-1.5 text-center">
+                            <div>
+                              <label className="text-[10px] text-stone-400 block">Stok Awal</label>
+                              <input
+                                type="number"
+                                step="0.5"
+                                value={item.stockStart}
+                                onChange={(e) => handlePhysicalStockChange(item.id, 'stockStart', e.target.value)}
+                                className="w-full bg-stone-950 border border-stone-700 rounded-lg px-1.5 py-1 text-xs font-bold text-center text-stone-100"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-emerald-400 block">+ Masuk</label>
+                              <input
+                                type="number"
+                                step="0.5"
+                                value={item.stockIn}
+                                onChange={(e) => handlePhysicalStockChange(item.id, 'stockIn', e.target.value)}
+                                className="w-full bg-stone-950 border border-emerald-700/60 rounded-lg px-1.5 py-1 text-xs font-bold text-center text-emerald-300"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-rose-400 block">Rusak</label>
+                              <input
+                                type="number"
+                                step="0.5"
+                                value={item.stockWaste}
+                                onChange={(e) => handlePhysicalStockChange(item.id, 'stockWaste', e.target.value)}
+                                className="w-full bg-stone-950 border border-rose-700/60 rounded-lg px-1.5 py-1 text-xs font-bold text-center text-rose-300"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-amber-400 block">Stok Akhir</label>
+                              <input
+                                type="number"
+                                step="0.5"
+                                value={item.stockEnd}
+                                onChange={(e) => handlePhysicalStockChange(item.id, 'stockEnd', e.target.value)}
+                                className="w-full bg-stone-950 border border-amber-500/70 rounded-lg px-1.5 py-1 text-xs font-black text-center text-amber-300"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-stone-700 text-stone-400">
+                        <th className="py-2 px-2">Nama Barang</th>
+                        <th className="py-2 px-2">Harga Jual</th>
+                        <th className="py-2 px-2 text-center">Stok Awal</th>
+                        <th className="py-2 px-2 text-center">+ Masuk</th>
+                        <th className="py-2 px-2 text-center">Rusak</th>
+                        <th className="py-2 px-2 text-center">Terpakai Racikan</th>
+                        <th className="py-2 px-2 text-center">Stok Akhir</th>
+                        <th className="py-2 px-2 text-right">Laku Murni</th>
+                        <th className="py-2 px-2 text-right">Total Omzet</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-800">
+                      {physicalStockList
+                        .filter((item) => item.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                        .map((item) => {
+                          const usedInRecipe = recipeUsageMap[item.id]?.totalQty || 0;
+                          const avail = (Number(item.stockStart) || 0) + (Number(item.stockIn) || 0) - (Number(item.stockWaste) || 0);
+                          const rawDepleted = Math.max(0, avail - (Number(item.stockEnd) || 0));
+                          const directSold = Math.max(0, Math.round((rawDepleted - usedInRecipe) * 100) / 100);
+                          const omzetDirect = directSold * (Number(item.price) || 0);
+
+                          return (
+                            <tr key={item.id} className="hover:bg-stone-900/50">
+                              <td className="py-2 px-2 font-bold text-stone-100">{item.name}</td>
+                              <td className="py-2 px-2 text-emerald-400 font-bold">{formatRp(item.price)}</td>
+                              <td className="py-2 px-2 text-center">
+                                <input
+                                  type="number"
+                                  step="0.5"
+                                  value={item.stockStart}
+                                  onChange={(e) => handlePhysicalStockChange(item.id, 'stockStart', e.target.value)}
+                                  className="w-16 bg-stone-900 border border-stone-700 rounded px-1.5 py-1 text-center"
+                                />
+                              </td>
+                              <td className="py-2 px-2 text-center">
+                                <input
+                                  type="number"
+                                  step="0.5"
+                                  value={item.stockIn}
+                                  onChange={(e) => handlePhysicalStockChange(item.id, 'stockIn', e.target.value)}
+                                  className="w-16 bg-stone-900 border border-emerald-700 rounded px-1.5 py-1 text-center text-emerald-300"
+                                />
+                              </td>
+                              <td className="py-2 px-2 text-center">
+                                <input
+                                  type="number"
+                                  step="0.5"
+                                  value={item.stockWaste}
+                                  onChange={(e) => handlePhysicalStockChange(item.id, 'stockWaste', e.target.value)}
+                                  className="w-16 bg-stone-900 border border-rose-700 rounded px-1.5 py-1 text-center text-rose-300"
+                                />
+                              </td>
+                              <td className="py-2 px-2 text-center text-cyan-300 font-bold">
+                                {formatQty(usedInRecipe)} {item.unit}
+                              </td>
+                              <td className="py-2 px-2 text-center">
+                                <input
+                                  type="number"
+                                  step="0.5"
+                                  value={item.stockEnd}
+                                  onChange={(e) => handlePhysicalStockChange(item.id, 'stockEnd', e.target.value)}
+                                  className="w-16 bg-stone-900 border border-amber-500 rounded px-1.5 py-1 text-center font-black text-amber-300"
+                                />
+                              </td>
+                              <td className="py-2 px-2 text-right font-bold">
+                                {formatQty(directSold)} {item.unit}
+                              </td>
+                              <td className="py-2 px-2 text-right font-black text-amber-300">{formatRp(omzetDirect)}</td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* BAGIAN 3 KASIR: BELANJA KASIR (PETTY CASH) & SETORAN TUTUP SHIFT */}
+          {(kasirSubTab === 'all' || kasirSubTab === 'setoran') && (
+            <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Petty Cash */}
+              <div className="bg-[#1A1614] border border-stone-800 rounded-2xl p-4 space-y-3">
+                <h3 className="text-sm font-black text-amber-400">
+                  🧾 Catat Pengeluaran Kasir Mendadak (Es Batu, Gas, Plastik, Air Galon)
+                </h3>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    placeholder="Keterangan belanja (misal: Beli Es Batu 2 Balok)"
+                    value={pettyDesc}
+                    onChange={(e) => setPettyDesc(e.target.value)}
+                    className="flex-1 bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 text-xs text-stone-100"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Nominal (Rp)"
+                    value={pettyAmount}
+                    onChange={(e) => setPettyAmount(e.target.value)}
+                    className="w-full sm:w-36 bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 text-xs text-stone-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!pettyDesc.trim() || !Number(pettyAmount)) return;
+                      setPettyCashList((prev) => [
+                        ...prev,
+                        { id: Date.now(), desc: pettyDesc.trim(), amount: Number(pettyAmount) },
+                      ]);
+                      setPettyDesc('');
+                      setPettyAmount('');
+                    }}
+                    className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-black text-xs"
+                  >
+                    + Tambah
+                  </button>
+                </div>
+
+                <div className="space-y-1.5">
+                  {pettyCashList.map((p) => (
+                    <div
+                      key={p.id}
+                      className="flex items-center justify-between bg-stone-900 px-3 py-2 rounded-xl border border-stone-800 text-xs"
+                    >
+                      <span className="text-stone-200 font-bold">{p.desc}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-rose-400 font-black">{formatRp(p.amount)}</span>
+                        <button
+                          type="button"
+                          onClick={() => setPettyCashList((prev) => prev.filter((x) => x.id !== p.id))}
+                          className="text-stone-500 hover:text-rose-400"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Setoran Laci & Tutup Shift */}
+              <div className="bg-[#1A1614] border border-stone-800 rounded-2xl p-4 space-y-3">
+                <h3 className="text-sm font-black text-emerald-400">
+                  💰 Rekonsiliasi Uang Laci Kasir & Tutup Shift
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] text-stone-400 block mb-1">Total Pembayaran QRIS / Transfer (Rp)</label>
+                    <input
+                      type="number"
+                      value={qrisAmount}
+                      onChange={(e) => setQrisAmount(e.target.value)}
+                      className="w-full bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 text-xs font-bold text-cyan-300"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-stone-400 block mb-1">Uang Tunai Fisik di Laci Saat Ini (Rp)</label>
+                    <input
+                      type="number"
+                      value={actualCashInDrawer}
+                      onChange={(e) => setActualCashInDrawer(e.target.value)}
+                      className="w-full bg-stone-900 border border-amber-500/60 rounded-xl px-3 py-2 text-xs font-black text-amber-300"
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-stone-900 p-3 rounded-xl border border-stone-800 space-y-1 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-stone-400">Uang Tunai Seharusnya Ada di Laci:</span>
+                    <span className="font-black text-stone-100">{formatRp(shiftTotals.expectedCash)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-stone-400">Status Selisih Setoran Kasir:</span>
+                    <span
+                      className={`font-black ${
+                        shiftTotals.cashDiscrepancy < 0 ? 'text-rose-400' : 'text-emerald-400'
+                      }`}
+                    >
+                      {shiftTotals.cashDiscrepancy === 0
+                        ? '✅ KLOP / PAS (Rp 0)'
+                        : shiftTotals.cashDiscrepancy < 0
+                        ? `⚠️ KURANG SETOR ${formatRp(shiftTotals.cashDiscrepancy)}`
+                        : `➕ LEBIH ${formatRp(shiftTotals.cashDiscrepancy)}`}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleCloseShiftAndCarryOver}
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-red-800 to-amber-600 hover:from-red-700 hover:to-amber-500 text-white font-black text-xs sm:text-sm shadow-lg"
+                >
+                  🔒 Tutup Shift Sekarang & Kunci Stok Akhir Jadi Stok Awal Shift Berikutnya
+                </button>
+              </div>
+            </section>
+          )}
+        </main>
+      )}
+
+      {/* ==================================================================== */}
+      {/* PORTAL 2: OWNER / ADMIN (DILINDUNGI PIN & MODE KARTU HP LENGKAP)      */}
+      {/* ==================================================================== */}
+      {role === 'owner' && !isOwnerUnlocked && (
+        <main className="max-w-md mx-auto px-4 pt-12">
+          <div className="bg-[#1A1614] border-2 border-red-900/60 rounded-3xl p-6 text-center space-y-4 shadow-2xl">
+            <img
+              src={customLogo}
+              alt="Logo Warkop Sumber Redjeki"
+              className="h-24 mx-auto rounded-xl border border-red-800 bg-[#FCFBF7] p-1"
+            />
+            <h2 className="text-lg font-black text-amber-400">🔒 Portal Khusus Owner Warkop</h2>
+            <p className="text-xs text-stone-400">
+              Masukkan PIN Owner untuk membuka rahasia HPP, Margin Keuntungan, Resep Racikan, Gaji Pekerja & Pembukuan 1 Bulan.
+            </p>
+            <input
+              type="password"
+              placeholder="Masukkan PIN Owner (Default: 1234)"
+              value={pinInput}
+              onChange={(e) => {
+                setPinInput(e.target.value);
+                setPinError('');
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  if (pinInput === ownerPin) {
+                    setIsOwnerUnlocked(true);
+                    setPinInput('');
+                  } else {
+                    setPinError('PIN Owner salah!');
+                  }
+                }
+              }}
+              className="w-full bg-stone-900 border border-stone-700 rounded-xl px-4 py-3 text-center text-base font-black tracking-widest text-amber-300"
+            />
+            {pinError && <p className="text-xs font-bold text-rose-400">{pinError}</p>}
+            <button
+              type="button"
+              onClick={() => {
+                if (pinInput === ownerPin) {
+                  setIsOwnerUnlocked(true);
+                  setPinInput('');
+                } else {
+                  setPinError('PIN Owner salah!');
+                }
+              }}
+              className="w-full py-3 rounded-xl bg-red-800 hover:bg-red-700 text-amber-200 font-black text-sm shadow-lg"
+            >
+              🔓 Buka Portal Owner
+            </button>
+          </div>
+        </main>
+      )}
+
+      {role === 'owner' && isOwnerUnlocked && (
+        <main className="max-w-7xl mx-auto px-3 sm:px-6 pt-5 space-y-6">
+          {/* Bar Atas Navigasi 4 Tab Owner (Sesuai Screenshot) + Mode HP */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 flex-1">
+              {[
+                { id: 'tab1', title: '1. Radar Audit &', sub: 'Belanja Kulakan' },
+                { id: 'tab2', title: '2. Master 50 HPP', sub: 'Warkop Fix & Gudang' },
+                { id: 'tab3', title: '3. Custom Pekerja, Gaji', sub: '& Absensi' },
+                { id: 'tab4', title: '4. Pembukuan 1 Bulan', sub: '& Sinking Fund' },
+                { id: 'all_mobile', title: '📱 Semua ke Bawah', sub: '(Mode 1 Halaman HP)' },
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setOwnerTab(t.id)}
+                  className={`text-left p-3 rounded-2xl border transition ${
+                    ownerTab === t.id
+                      ? 'bg-[#8B1E1E] border-amber-400 text-white shadow-lg'
+                      : 'bg-[#1A1614] border-stone-800 text-stone-300 hover:border-stone-700'
+                  }`}
+                >
+                  <div className="text-xs font-black leading-tight">{t.title}</div>
+                  <div className="text-xs font-black leading-tight mt-0.5">{t.sub}</div>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="flex bg-stone-900 p-1 rounded-xl border border-stone-700">
+                <button
+                  type="button"
+                  onClick={() => setOwnerViewMode('cards')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black ${
+                    ownerViewMode === 'cards' ? 'bg-amber-500 text-stone-950' : 'text-stone-400'
+                  }`}
+                >
+                  📱 Kartu HP
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOwnerViewMode('table')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black ${
+                    ownerViewMode === 'table' ? 'bg-amber-500 text-stone-950' : 'text-stone-400'
+                  }`}
+                >
+                  💻 Tabel
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsOwnerUnlocked(false)}
+                className="px-3 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-xs font-bold text-stone-300"
+              >
+                🔒 Kunci
+              </button>
+            </div>
+          </div>
+
+          {/* ================================================================ */}
+          {/* TAB 1 OWNER: RADAR AUDIT, BELANJA KULAKAN & TOP 5 PROFIT MINGGUAN */}
+          {/* ================================================================ */}
+          {(ownerTab === 'tab1' || ownerTab === 'all_mobile') && (
+            <section className="space-y-6">
+              {/* KALKULATOR BELANJA STOK MENIPIS */}
+              <div className="bg-[#1A1614] border-2 border-amber-500/40 rounded-3xl p-5 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-base sm:text-lg font-black text-amber-400">
+                      🛒 Kalkulator Estimasi Belanja Stok Menipis (Berapa Rupiah Harus Dikeluarkan Owner)
+                    </h3>
+                    <p className="text-xs text-stone-400">
+                      Menghitung otomatis perkiraan modal belanja untuk barang fisik yang stok akhirnya menyentuh/di bawah batas tipis.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (lowStockReport.items.length === 0) return;
+                        setInventory((prev) =>
+                          prev.map((it) => {
+                            const found = lowStockReport.items.find((x) => x.id === it.id);
+                            if (!found) return it;
+                            const nextIn = (Number(it.stockIn) || 0) + found.qtyToBuy;
+                            const nextEnd = (Number(it.stockEnd) || 0) + found.qtyToBuy;
+                            return { ...it, stockIn: nextIn, stockEnd: nextEnd };
+                          })
+                        );
+                        showToast('✅ Semua barang belanjaan otomatis ditambahkan ke Stok Etalase!');
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black"
+                    >
+                      ✅ Masukkan Semua Belanjaan ke Stok (1-Klik)
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="bg-stone-900 p-4 rounded-2xl border border-stone-800">
+                    <span className="text-xs text-stone-400 block">Jumlah Barang Stok Menipis:</span>
+                    <span className="text-xl font-black text-rose-400">{lowStockReport.items.length} Barang</span>
+                  </div>
+                  <div className="bg-stone-900 p-4 rounded-2xl border border-amber-500/40">
+                    <span className="text-xs text-amber-300 block">Estimasi Belanja Eceran / Satuan (HPP):</span>
+                    <span className="text-xl font-black text-amber-400">{formatRp(lowStockReport.totalEstUnit)}</span>
+                  </div>
+                  <div className="bg-stone-900 p-4 rounded-2xl border border-emerald-500/40">
+                    <span className="text-xs text-emerald-300 block">Estimasi Belanja Grosir (Per Dus / Renceng):</span>
+                    <span className="text-xl font-black text-emerald-400">{formatRp(lowStockReport.totalEstPack)}</span>
+                  </div>
+                </div>
+
+                {lowStockReport.items.length > 0 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                    {lowStockReport.items.map((item) => (
+                      <div key={item.id} className="bg-stone-900/90 border border-stone-800 rounded-2xl p-3 flex justify-between items-center">
+                        <div>
+                          <div className="text-xs font-black text-stone-100">{item.name}</div>
+                          <div className="text-[11px] text-rose-400 font-bold">
+                            Sisa: {formatQty(item.stockEnd)} {item.unit} (Wajib Beli +{item.qtyToBuy} {item.unit})
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] text-stone-400 block">Perkiraan Biaya</span>
+                          <span className="text-xs font-black text-amber-300">{formatRp(item.estUnitTotal)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* TOP 5 MENU PENYUMBANG PROFIT BERSIH TERBESAR */}
+              <div className="bg-[#1A1614] border border-stone-800 rounded-3xl p-5 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-base sm:text-lg font-black text-emerald-400">
+                      🏆 Top 5 Menu Nasi & Minuman Penyumbang Profit Terbesar
+                    </h3>
+                    <p className="text-xs text-stone-400">
+                      Memudahkan Owner mengetahui menu mana yang paling banyak menghasilkan keuntungan bersih.
+                    </p>
+                  </div>
+                  <div className="flex bg-stone-900 p-1 rounded-xl border border-stone-700">
+                    {[
+                      { id: 'current', label: '⚡ Shift Ini' },
+                      { id: 'weekly', label: '📅 Mingguan (7 Hari)' },
+                      { id: 'monthly', label: '🗓️ Bulanan (30 Hari)' },
+                    ].map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => setTopSellerPeriod(p.id)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-black ${
+                          topSellerPeriod === p.id ? 'bg-emerald-500 text-stone-950' : 'text-stone-400'
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {topProfitMenus.topOverall.length === 0 ? (
+                  <p className="text-xs text-stone-400 italic py-4 text-center">
+                    Belum ada penjualan tercatat pada periode ini. Klik +1 Laku di Kasir untuk melihat grafik peringkat profit!
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Top Makanan */}
+                    <div className="bg-stone-900/90 border border-stone-800 rounded-2xl p-4 space-y-3">
+                      <h4 className="text-xs font-black uppercase text-amber-400">
+                        🍛 Top Menu Nasi, Mie & Cemilan Paling Untung
+                      </h4>
+                      {topProfitMenus.topFoods.map((m, idx) => (
+                        <div key={m.name} className="space-y-1">
+                          <div className="flex justify-between text-xs">
+                            <span className="font-black text-stone-100">
+                              #{idx + 1} {m.name} ({formatQty(m.sold)} terjual)
+                            </span>
+                            <span className="font-black text-emerald-400">
+                              +{formatRp(m.profit)} ({m.sharePct}%)
+                            </span>
+                          </div>
+                          <div className="w-full h-2 bg-stone-800 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-amber-500 to-emerald-400"
+                              style={{ width: `${Math.max(8, m.sharePct)}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Top Minuman */}
+                    <div className="bg-stone-900/90 border border-stone-800 rounded-2xl p-4 space-y-3">
+                      <h4 className="text-xs font-black uppercase text-cyan-400">
+                        🥤 Top Minuman & Josu Paling Untung
+                      </h4>
+                      {topProfitMenus.topDrinks.map((m, idx) => (
+                        <div key={m.name} className="space-y-1">
+                          <div className="flex justify-between text-xs">
+                            <span className="font-black text-stone-100">
+                              #{idx + 1} {m.name} ({formatQty(m.sold)} terjual)
+                            </span>
+                            <span className="font-black text-cyan-300">
+                              +{formatRp(m.profit)} ({m.sharePct}%)
+                            </span>
+                          </div>
+                          <div className="w-full h-2 bg-stone-800 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-cyan-500 to-emerald-400"
+                              style={{ width: `${Math.max(8, m.sharePct)}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* RADAR ANTI-MANIPULASI STOK AWAL */}
+              {tamperedItems.length > 0 && (
+                <div className="bg-rose-950/40 border-2 border-rose-500 rounded-3xl p-4 space-y-2">
+                  <h4 className="text-sm font-black text-rose-300">
+                    🚨 PERINGATAN AUDIT: Ada {tamperedItems.length} Barang yang Stok Awalnya Diubah dari Stok Akhir Kemarin!
+                  </h4>
+                  {tamperedItems.map((t) => (
+                    <div key={t.id} className="text-xs text-rose-200 flex justify-between">
+                      <span>{t.name}</span>
+                      <span>
+                        Stok Akhir Kemarin: <b>{previousShiftClosingMap[t.id]}</b> ➔ Diubah Jadi: <b>{t.stockStart}</b>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* ================================================================ */}
+          {/* TAB 2 OWNER: MASTER 50 HPP WARKOP FIX & EDITOR RESEP OTOMATIS     */}
+          {/* ================================================================ */}
+          {(ownerTab === 'tab2' || ownerTab === 'all_mobile') && (
+            <section className="bg-[#1A1614] border border-stone-800 rounded-3xl p-5 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-amber-400">
+                    📦 2. Master 50 HPP Warkop Fix, Gudang & Editor Resep Otomatis (0.5, 1, 1.5, 2)
+                  </h3>
+                  <p className="text-xs text-stone-400">
+                    Klik tombol <b>✏️ Edit / Resep</b> pada menu untuk mengatur HPP, Harga Jual, atau komposisi bahan baku otomatis.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddMenuModal(true)}
+                    className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black"
+                  >
+                    + Tambah Menu / Barang Baru
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInventory((prev) =>
+                        prev.map((it) => ({
+                          ...it,
+                          soldCount: 0,
+                          stockStart: 0,
+                          stockIn: 0,
+                          stockWaste: 0,
+                          stockEnd: 0,
+                        }))
+                      );
+                      setPreviousShiftClosingMap({});
+                      showToast('🔄 Seluruh angka stok & penjualan berhasil di-0-kan!');
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-rose-900/80 hover:bg-rose-800 text-rose-100 text-xs font-black"
+                  >
+                    🔄 0-kan Semua Stok
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {inventory
+                  .filter((it) => it.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                  .map((item) => {
+                    const margin = (Number(item.price) || 0) - (Number(item.cost) || 0);
+                    return (
+                      <div key={item.id} className="bg-stone-900/90 border border-stone-800 rounded-2xl p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <span className="text-[10px] font-bold text-amber-400">
+                              #{item.no} • {item.category}
+                            </span>
+                            <h4 className="text-sm font-black text-stone-100">{item.name}</h4>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setEditingItem({ ...item, recipe: [...(item.recipe || [])] })}
+                              className="px-2.5 py-1 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[11px] font-black"
+                            >
+                              ✏️ Edit / Resep
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setInventory((prev) => prev.filter((x) => x.id !== item.id))}
+                              className="px-2 py-1 rounded-lg bg-rose-950/60 text-rose-400 text-[11px]"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+
+                        {item.isMenuRacikan && (
+                          <div className="text-[10px] bg-stone-950 border border-stone-800 rounded-xl p-2 text-amber-200/90">
+                            <b className="block text-amber-400 mb-0.5">🍳 Menu Racikan (Auto-Potong Stok)</b>
+                            {Array.isArray(item.recipe) && item.recipe.length > 0
+                              ? item.recipe
+                                  .map((r) => {
+                                    const ing = inventory.find((i) => i.id === Number(r.ingredientId));
+                                    return ing ? `${formatQty(r.qty)} ${ing.name}` : '';
+                                  })
+                                  .filter(Boolean)
+                                  .join(' + ')
+                              : 'Belum ada bahan resep'}
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-3 gap-2 pt-1">
+                          <div>
+                            <label className="text-[10px] text-rose-300 block">HPP Akhir</label>
+                            <input
+                              type="number"
+                              value={item.cost}
+                              onChange={(e) =>
+                                setInventory((prev) =>
+                                  prev.map((x) => (x.id === item.id ? { ...x, cost: Number(e.target.value) || 0 } : x))
+                                )
+                              }
+                              className="w-full bg-stone-950 border border-rose-800/60 rounded-lg px-2 py-1 text-xs font-bold text-rose-300"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-amber-300 block">Harga Jual</label>
+                            <input
+                              type="number"
+                              value={item.price}
+                              onChange={(e) =>
+                                setInventory((prev) =>
+                                  prev.map((x) => (x.id === item.id ? { ...x, price: Number(e.target.value) || 0 } : x))
+                                )
+                              }
+                              className="w-full bg-stone-950 border border-amber-700/60 rounded-lg px-2 py-1 text-xs font-bold text-amber-300"
+                            />
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[10px] text-emerald-300 block">Untung/{item.unit}</span>
+                            <span className="text-xs font-black text-emerald-400 block mt-1.5">
+                              {formatRp(margin)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </section>
+          )}
+
+          {/* ================================================================ */}
+          {/* TAB 3 OWNER: CUSTOM PEKERJA, GAJI HARIAN & REKAP ALFA/ABSENSI     */}
+          {/* ================================================================ */}
+          {(ownerTab === 'tab3' || ownerTab === 'all_mobile') && (
+            <section className="bg-[#1A1614] border border-stone-800 rounded-3xl p-5 space-y-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-amber-400">
+                    👷 3. Manajemen Pekerja, Edit Gaji Harian & Rekap Alfa / Tidak Masuk
+                  </h3>
+                  <p className="text-xs text-stone-400">
+                    Nama pekerja (seperti Tatan / Rian) bisa langsung diedit atau dihapus jika tidak terpakai, lengkap dengan tanggal Alfa.
+                  </p>
+                </div>
+              </div>
+
+              {/* Kartu Pekerja (Bisa Edit Nama, Gaji Harian & Hapus) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {workerSummaryList.map((w) => (
+                  <div key={w.id} className="bg-stone-900 border border-stone-800 rounded-2xl p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <input
+                        type="text"
+                        value={w.name}
+                        onChange={(e) => {
+                          const newName = e.target.value;
+                          const oldName = w.name;
+                          setWorkers((prev) => prev.map((x) => (x.id === w.id ? { ...x, name: newName } : x)));
+                          setAttendanceLogs((prev) =>
+                            prev.map((l) => (l.workerName === oldName ? { ...l, workerName: newName } : l))
+                          );
+                        }}
+                        className="bg-stone-950 border border-stone-700 rounded-xl px-3 py-1.5 text-sm font-black text-amber-300 w-1/2"
+                      />
+                      <input
+                        type="text"
+                        value={w.role}
+                        onChange={(e) =>
+                          setWorkers((prev) => prev.map((x) => (x.id === w.id ? { ...x, role: e.target.value } : x)))
+                        }
+                        className="bg-stone-950 border border-stone-700 rounded-xl px-3 py-1.5 text-xs text-stone-300 flex-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setWorkers((prev) => prev.filter((x) => x.id !== w.id))}
+                        className="px-2.5 py-1.5 rounded-xl bg-rose-950 hover:bg-rose-900 text-rose-300 text-xs font-bold"
+                      >
+                        🗑️ Hapus
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                      <div className="bg-stone-950 p-2.5 rounded-xl border border-stone-800">
+                        <span className="text-[10px] text-stone-400 block">Gaji / Hari (Rp)</span>
+                        <input
+                          type="number"
+                          value={w.dailyWage}
+                          onChange={(e) =>
+                            setWorkers((prev) =>
+                              prev.map((x) => (x.id === w.id ? { ...x, dailyWage: Number(e.target.value) || 0 } : x))
+                            )
+                          }
+                          className="w-full bg-transparent text-center text-xs font-black text-amber-300 mt-0.5 focus:outline-none"
+                        />
+                      </div>
+                      <div className="bg-stone-950 p-2.5 rounded-xl border border-emerald-900/50">
+                        <span className="text-[10px] text-emerald-400 block">✅ Hadir</span>
+                        <span className="text-sm font-black text-emerald-300">{w.hadirCount} Hari</span>
+                      </div>
+                      <div className="bg-stone-950 p-2.5 rounded-xl border border-rose-900/50">
+                        <span className="text-[10px] text-rose-400 block">❌ Alfa / Mangkir</span>
+                        <span className="text-sm font-black text-rose-400">{w.alfaCount} Kali</span>
+                      </div>
+                      <div className="bg-stone-950 p-2.5 rounded-xl border border-cyan-900/50">
+                        <span className="text-[10px] text-cyan-400 block">💰 Total Gaji Bersih</span>
+                        <span className="text-xs font-black text-cyan-300">{formatRp(w.netWage)}</span>
+                      </div>
+                    </div>
+
+                    {/* Daftar Tanggal Alfa & Izin */}
+                    <div className="text-[11px] bg-stone-950 p-2.5 rounded-xl border border-stone-800 space-y-1">
+                      <div>
+                        <span className="text-rose-400 font-bold">📅 Tanggal Alfa (Tidak Masuk): </span>
+                        <span className="text-stone-300">
+                          {w.alfaDates.length > 0 ? w.alfaDates.join(', ') : 'Tidak ada Alfa (Rajin)'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-amber-400 font-bold">🤒 Tanggal Izin / Sakit: </span>
+                        <span className="text-stone-300">
+                          {w.izinDates.length > 0 ? w.izinDates.join(', ') : '-'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Tombol Cepat Catat Hadir / Alfa / Izin */}
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setAttendanceLogs((prev) => [
+                            {
+                              id: Date.now(),
+                              workerName: w.name,
+                              date: shiftDate,
+                              shift: w.role,
+                              status: 'Hadir',
+                              deduction: 0,
+                              note: 'Hadir Harian',
+                            },
+                            ...prev,
+                          ])
+                        }
+                        className="flex-1 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-black"
+                      >
+                        + Catat Hadir Hari Ini
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setAttendanceLogs((prev) => [
+                            {
+                              id: Date.now(),
+                              workerName: w.name,
+                              date: shiftDate,
+                              shift: w.role,
+                              status: 'Alfa',
+                              deduction: 0,
+                              note: 'Alfa / Tidak Masuk',
+                            },
+                            ...prev,
+                          ])
+                        }
+                        className="flex-1 py-1.5 rounded-xl bg-rose-800 hover:bg-rose-700 text-white text-xs font-black"
+                      >
+                        + Catat Alfa ({shiftDate})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setAttendanceLogs((prev) => [
+                            {
+                              id: Date.now(),
+                              workerName: w.name,
+                              date: shiftDate,
+                              shift: w.role,
+                              status: 'Izin',
+                              deduction: 0,
+                              note: 'Izin / Sakit',
+                            },
+                            ...prev,
+                          ])
+                        }
+                        className="px-3 py-1.5 rounded-xl bg-amber-700 hover:bg-amber-600 text-white text-xs font-black"
+                      >
+                        + Izin/Sakit
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Tambah Pekerja Baru */}
+              <div className="bg-stone-900 p-4 rounded-2xl border border-stone-800 flex flex-wrap items-end gap-3">
+                <div className="flex-1 min-w-[160px]">
+                  <label className="text-[10px] text-stone-400 block mb-1">Nama Pekerja Baru</label>
+                  <input
+                    type="text"
+                    placeholder="Misal: Dani"
+                    value={newWorkerForm.name}
+                    onChange={(e) => setNewWorkerForm({ ...newWorkerForm, name: e.target.value })}
+                    className="w-full bg-stone-950 border border-stone-700 rounded-xl px-3 py-2 text-xs text-stone-100"
+                  />
+                </div>
+                <div className="flex-1 min-w-[160px]">
+                  <label className="text-[10px] text-stone-400 block mb-1">Jabatan / Shift</label>
+                  <input
+                    type="text"
+                    placeholder="Penjaga Shift Sore"
+                    value={newWorkerForm.role}
+                    onChange={(e) => setNewWorkerForm({ ...newWorkerForm, role: e.target.value })}
+                    className="w-full bg-stone-950 border border-stone-700 rounded-xl px-3 py-2 text-xs text-stone-100"
+                  />
+                </div>
+                <div className="w-40">
+                  <label className="text-[10px] text-stone-400 block mb-1">Gaji Harian (Rp)</label>
+                  <input
+                    type="number"
+                    value={newWorkerForm.dailyWage}
+                    onChange={(e) => setNewWorkerForm({ ...newWorkerForm, dailyWage: Number(e.target.value) || 0 })}
+                    className="w-full bg-stone-950 border border-stone-700 rounded-xl px-3 py-2 text-xs text-amber-300 font-bold"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!newWorkerForm.name.trim()) return;
+                    setWorkers((prev) => [
+                      ...prev,
+                      {
+                        id: Date.now(),
+                        name: newWorkerForm.name.trim(),
+                        role: newWorkerForm.role || 'Penjaga Shift',
+                        dailyWage: Number(newWorkerForm.dailyWage) || 0,
+                      },
+                    ]);
+                    setNewWorkerForm({ name: '', role: 'Penjaga Shift', dailyWage: 0 });
+                  }}
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-black text-xs"
+                >
+                  + Tambah Pekerja
+                </button>
+              </div>
+            </section>
+          )}
+
+          {/* ================================================================ */}
+          {/* TAB 4 OWNER: PEMBUKUAN 1 BULAN FULL & CUSTOM SINKING FUND         */}
+          {/* (PERSIS SESUAI 3 SCREENSHOT PERMINTAAN USER)                      */}
+          {/* ================================================================ */}
+          {(ownerTab === 'tab4' || ownerTab === 'all_mobile') && (
+            <section className="space-y-6">
+              {/* KARTU 1: PEMBUKUAN 1 BULAN FULL (30 HARI) & INTEGRASI GOOGLE SHEETS */}
+              <div className="bg-[#161311] border border-stone-800 rounded-3xl p-5 sm:p-7 space-y-5 shadow-2xl">
+                <h3 className="text-lg sm:text-xl font-black text-white flex items-center gap-2.5">
+                  <span>📊</span>
+                  <span>Pembukuan 1 Bulan Full (30 Hari) & Integrasi Google Sheets</span>
+                </h3>
+
+                <div className="bg-[#110F0E] border border-stone-800/90 rounded-2xl p-5 space-y-4">
+                  <div className="flex items-center justify-between border-b border-stone-800/80 pb-3 text-sm">
+                    <span className="text-stone-400">Total Pemasukan / Omzet:</span>
+                    <span className="font-black text-emerald-400">{formatRp(monthlyBookkeeping.totalOmzet)}</span>
+                  </div>
+                  <div className="flex items-center justify-between border-b border-stone-800/80 pb-3 text-sm">
+                    <span className="text-stone-400">Total Modal HPP Bahan Baku:</span>
+                    <span className="font-black text-amber-400">{formatRp(monthlyBookkeeping.totalHpp)}</span>
+                  </div>
+                  <div className="flex items-center justify-between border-b border-stone-800/80 pb-3 text-sm">
+                    <span className="text-stone-400">Laba Kotor (Gross Profit):</span>
+                    <span className="font-black text-white">{formatRp(monthlyBookkeeping.grossProfit)}</span>
+                  </div>
+                  <div className="flex items-center justify-between border-b border-stone-800/80 pb-3 text-sm">
+                    <span className="text-stone-400">Pengeluaran Kasir (Petty Cash):</span>
+                    <span className="font-black text-rose-400">{formatRp(monthlyBookkeeping.totalPettyCash)}</span>
+                  </div>
+                  <div className="flex items-center justify-between border-b border-stone-800/80 pb-3 text-sm">
+                    <span className="text-stone-400">Total Gaji Pekerja:</span>
+                    <span className="font-black text-rose-400">{formatRp(monthlyBookkeeping.totalWorkerWages)}</span>
+                  </div>
+                  <div className="flex items-center justify-between border-b border-stone-800/80 pb-3 text-sm">
+                    <span className="text-stone-400">Total Beban Ruko, Listrik & Sinking Fund:</span>
+                    <span className="font-black text-rose-400">{formatRp(monthlyBookkeeping.totalSinkingMonthly)}</span>
+                  </div>
+                  <div className="flex items-center justify-between pt-1 text-base sm:text-lg">
+                    <span className="font-black text-amber-400 uppercase">PROFIT BERSIH (NET PROFIT):</span>
+                    <span className="font-black text-emerald-400">{formatRp(monthlyBookkeeping.netProfit)}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2.5 pt-1">
+                  <label className="text-xs text-stone-400 block text-center">
+                    URL Webhook Google Apps Script (Akhiran /exec):
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="https://script.google.com/macros/s/.../exec"
+                    value={webhookUrl}
+                    onChange={(e) => setWebhookUrl(e.target.value)}
+                    className="w-full bg-[#110F0E] border border-stone-800 rounded-2xl px-4 py-3 text-xs sm:text-sm text-stone-200 focus:outline-none focus:border-emerald-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSendToGoogleSheets}
+                    className="w-full py-3.5 rounded-2xl bg-[#059669] hover:bg-[#10B981] text-white font-black text-xs sm:text-sm shadow-lg transition flex items-center justify-center gap-2"
+                  >
+                    <span>🚀</span>
+                    <span>Kirim / Unduh Pembukuan 1 Bulan Full ke Google Sheets</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* KARTU 2: CUSTOM TARGETAN SINKING FUND (PERSIS SCREENSHOT) */}
+              <div className="bg-[#161311] border border-stone-800 rounded-3xl p-5 sm:p-7 space-y-4 shadow-2xl">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg sm:text-xl font-black text-white flex items-center gap-2.5">
+                    <span>🐖</span>
+                    <span>Custom Targetan Sinking Fund</span>
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSinkingFunds((prev) => [
+                        ...prev,
+                        {
+                          id: Date.now(),
+                          name: 'Pos Tabungan Operasional Baru',
+                          dailyTarget: 10000,
+                          monthlyTarget: 300000,
+                        },
+                      ])
+                    }
+                    className="px-4 py-2 rounded-xl bg-[#B91C1C] hover:bg-red-600 text-white font-black text-xs shadow"
+                  >
+                    + Tambah Pos Baru
+                  </button>
+                </div>
+
+                <div className="space-y-3.5">
+                  {sinkingFunds.map((fund) => (
+                    <div
+                      key={fund.id}
+                      className="bg-[#1C1917] border border-stone-800 rounded-2xl p-4 space-y-3"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <input
+                          type="text"
+                          value={fund.name}
+                          onChange={(e) =>
+                            setSinkingFunds((prev) =>
+                              prev.map((f) => (f.id === fund.id ? { ...f, name: e.target.value } : f))
+                            )
+                          }
+                          className="bg-transparent text-amber-400 font-black text-sm focus:outline-none flex-1"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setSinkingFunds((prev) => prev.filter((f) => f.id !== fund.id))}
+                          className="text-stone-400 hover:text-rose-400 text-sm"
+                          title="Hapus Pos"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs text-stone-400 block text-center mb-1.5">
+                            Setoran / Hari (Rp)
+                          </label>
+                          <input
+                            type="number"
+                            value={fund.dailyTarget}
+                            onChange={(e) => {
+                              const daily = Number(e.target.value) || 0;
+                              setSinkingFunds((prev) =>
+                                prev.map((f) =>
+                                  f.id === fund.id
+                                    ? { ...f, dailyTarget: daily, monthlyTarget: daily * 30 }
+                                    : f
+                                )
+                              );
+                            }}
+                            className="w-full bg-[#110F0E] border border-stone-700/80 rounded-xl px-3.5 py-2.5 text-sm font-black text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-stone-400 block text-center mb-1.5">
+                            Target Bulanan (Rp)
+                          </label>
+                          <input
+                            type="number"
+                            value={fund.monthlyTarget}
+                            onChange={(e) => {
+                              const monthly = Number(e.target.value) || 0;
+                              setSinkingFunds((prev) =>
+                                prev.map((f) =>
+                                  f.id === fund.id
+                                    ? { ...f, monthlyTarget: monthly, dailyTarget: Math.round(monthly / 30) }
+                                    : f
+                                )
+                              );
+                            }}
+                            className="w-full bg-[#110F0E] border border-stone-700/80 rounded-xl px-3.5 py-2.5 text-sm font-black text-emerald-400"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          )}
+        </main>
+      )}
+
+      {/* ==================================================================== */}
+      {/* MODAL EDIT MENU & RESEP OTOMATIS (KELIPATAN 0.5, 1, 1.5, 2)          */}
+      {/* ==================================================================== */}
+      {editingItem && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-[#1A1614] border-2 border-amber-500/50 rounded-3xl max-w-xl w-full p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-black text-amber-400">
+                ✏️ Edit "{editingItem.name}" & Resep
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingItem(null)}
+                className="w-8 h-8 rounded-full bg-stone-800 text-stone-300 font-black"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div>
+                <label className="text-stone-400 block mb-1">Nama Menu / Barang</label>
+                <input
+                  type="text"
+                  value={editingItem.name}
+                  onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
+                  className="w-full bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 font-bold text-stone-100"
+                />
+              </div>
+              <div>
+                <label className="text-stone-400 block mb-1">Kategori</label>
+                <input
+                  type="text"
+                  value={editingItem.category}
+                  onChange={(e) => setEditingItem({ ...editingItem, category: e.target.value })}
+                  className="w-full bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 font-bold text-stone-100"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+              <div>
+                <label className="text-stone-400 block mb-1">Satuan</label>
+                <input
+                  type="text"
+                  value={editingItem.unit}
+                  onChange={(e) => setEditingItem({ ...editingItem, unit: e.target.value })}
+                  className="w-full bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 font-bold"
+                />
+              </div>
+              <div>
+                <label className="text-stone-400 block mb-1">Harga Grosir</label>
+                <input
+                  type="number"
+                  value={editingItem.packCost || 0}
+                  onChange={(e) => setEditingItem({ ...editingItem, packCost: Number(e.target.value) || 0 })}
+                  className="w-full bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 font-bold"
+                />
+              </div>
+              <div>
+                <label className="text-rose-400 block mb-1">HPP Akhir (Rp)</label>
+                <input
+                  type="number"
+                  value={editingItem.cost}
+                  onChange={(e) => setEditingItem({ ...editingItem, cost: Number(e.target.value) || 0 })}
+                  className="w-full bg-stone-900 border border-rose-500/60 rounded-xl px-3 py-2 font-black text-rose-300"
+                />
+              </div>
+              <div>
+                <label className="text-amber-400 block mb-1">Harga Jual (Rp)</label>
+                <input
+                  type="number"
+                  value={editingItem.price}
+                  onChange={(e) => setEditingItem({ ...editingItem, price: Number(e.target.value) || 0 })}
+                  className="w-full bg-stone-900 border border-amber-500/60 rounded-xl px-3 py-2 font-black text-amber-300"
+                />
+              </div>
+            </div>
+
+            {/* Pengaturan Resep Otomatis Potong Stok (Kelipatan 0.5 -> 1 -> 1.5 -> 2) */}
+            <div className="bg-stone-950 border border-stone-800 rounded-2xl p-3.5 space-y-3">
+              <label className="flex items-center gap-2 text-xs font-black text-amber-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={Boolean(editingItem.isMenuRacikan)}
+                  onChange={(e) => setEditingItem({ ...editingItem, isMenuRacikan: e.target.checked })}
+                  className="rounded text-amber-500"
+                />
+                <span>🍳 Apakah ini Menu Racikan / Campuran (Nasi Campur, Omlet, Josu)?</span>
+              </label>
+
+              {editingItem.isMenuRacikan && (
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-stone-300">
+                      Resep Otomatis Potong Stok (Kelipatan pas <b>0.5 ➔ 1 ➔ 1.5 ➔ 2</b>):
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditingItem({
+                          ...editingItem,
+                          recipe: [...(editingItem.recipe || []), { ingredientId: 101, qty: 1 }],
+                        })
+                      }
+                      className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black"
+                    >
+                      + Tambah Bahan Resep
+                    </button>
+                  </div>
+
+                  {(editingItem.recipe || []).map((r, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <select
+                        value={r.ingredientId}
+                        onChange={(e) => {
+                          const updated = [...editingItem.recipe];
+                          updated[idx] = { ...updated[idx], ingredientId: Number(e.target.value) };
+                          setEditingItem({ ...editingItem, recipe: updated });
+                        }}
+                        className="flex-1 bg-stone-900 border border-stone-700 rounded-xl px-2.5 py-2 text-xs text-stone-100"
+                      >
+                        {physicalStockList.map((ing) => (
+                          <option key={ing.id} value={ing.id}>
+                            {ing.name} ({ing.unit})
+                          </option>
+                        ))}
+                      </select>
+
+                      {/* Tombol -0.5, Input step 0.5, dan +0.5 */}
+                      <div className="flex items-center bg-stone-900 border border-amber-500/60 rounded-xl overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = [...editingItem.recipe];
+                            const currentQty = Math.round((Number(updated[idx].qty) || 1) * 2) / 2;
+                            updated[idx] = { ...updated[idx], qty: Math.max(0.5, currentQty - 0.5) };
+                            setEditingItem({ ...editingItem, recipe: updated });
+                          }}
+                          className="px-2.5 py-1.5 bg-stone-800 hover:bg-stone-700 text-amber-300 font-black text-xs"
+                        >
+                          -
+                        </button>
+                        <input
+                          type="number"
+                          min="0.5"
+                          step="0.5"
+                          value={r.qty}
+                          onChange={(e) => {
+                            const raw = String(e.target.value).replace(',', '.');
+                            const val = Math.max(0.5, parseFloat(raw) || 0.5);
+                            const updated = [...editingItem.recipe];
+                            updated[idx] = { ...updated[idx], qty: val };
+                            setEditingItem({ ...editingItem, recipe: updated });
+                          }}
+                          className="w-14 bg-transparent text-center text-xs font-black text-amber-300 focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = [...editingItem.recipe];
+                            const currentQty = Math.round((Number(updated[idx].qty) || 0.5) * 2) / 2;
+                            updated[idx] = { ...updated[idx], qty: currentQty + 0.5 };
+                            setEditingItem({ ...editingItem, recipe: updated });
+                          }}
+                          className="px-2.5 py-1.5 bg-stone-800 hover:bg-stone-700 text-amber-300 font-black text-xs"
+                        >
+                          +
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = editingItem.recipe.filter((_, i) => i !== idx);
+                          setEditingItem({ ...editingItem, recipe: updated });
+                        }}
+                        className="px-2.5 py-1.5 rounded-xl bg-rose-950 text-rose-300 text-xs font-black"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setEditingItem(null)}
+                className="px-4 py-2 rounded-xl bg-stone-800 text-stone-300 text-xs font-bold"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setInventory((prev) => prev.map((it) => (it.id === editingItem.id ? editingItem : it)));
+                  setEditingItem(null);
+                  showToast('💾 Perubahan menu & resep otomatis berhasil disimpan!');
+                }}
+                className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-black"
+              >
+                💾 Simpan Perubahan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* MODAL TAMBAH MENU / BARANG BARU                                      */}
+      {/* ==================================================================== */}
+      {showAddMenuModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#1A1614] border-2 border-emerald-500/50 rounded-3xl max-w-md w-full p-5 space-y-4">
+            <h3 className="text-base font-black text-emerald-400">+ Tambah Menu / Barang Baru</h3>
+            <div className="space-y-3 text-xs">
+              <input
+                type="text"
+                placeholder="Nama Menu / Barang"
+                value={newMenuForm.name}
+                onChange={(e) => setNewMenuForm({ ...newMenuForm, name: e.target.value })}
+                className="w-full bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 text-stone-100"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="number"
+                  placeholder="Modal HPP (Rp)"
+                  value={newMenuForm.cost || ''}
+                  onChange={(e) => setNewMenuForm({ ...newMenuForm, cost: Number(e.target.value) || 0 })}
+                  className="bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 text-rose-300"
+                />
+                <input
+                  type="number"
+                  placeholder="Harga Jual (Rp)"
+                  value={newMenuForm.price || ''}
+                  onChange={(e) => setNewMenuForm({ ...newMenuForm, price: Number(e.target.value) || 0 })}
+                  className="bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 text-amber-300"
+                />
+              </div>
+              <label className="flex items-center gap-2 text-amber-300 font-bold">
+                <input
+                  type="checkbox"
+                  checked={newMenuForm.isMenuRacikan}
+                  onChange={(e) => setNewMenuForm({ ...newMenuForm, isMenuRacikan: e.target.checked })}
+                />
+                <span>Menu Racikan (Tanpa Stok Awal/Akhir)</span>
+              </label>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowAddMenuModal(false)}
+                className="px-4 py-2 rounded-xl bg-stone-800 text-xs font-bold"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!newMenuForm.name.trim()) return;
+                  setInventory((prev) => [
+                    ...prev,
+                    {
+                      ...newMenuForm,
+                      id: Date.now(),
+                      no: prev.length + 1,
+                      baseUnitCost: newMenuForm.cost,
+                      soldCount: 0,
+                      stockStart: 0,
+                      stockIn: 0,
+                      stockWaste: 0,
+                      stockEnd: 0,
+                    },
+                  ]);
+                  setShowAddMenuModal(false);
+                  showToast('✅ Menu baru berhasil ditambahkan!');
+                }}
+                className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-black"
+              >
+                Simpan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* MODAL DIAGNOSTIK CLOUD REAL-TIME (TES KONEKSI LAPTOP <-> HP)          */}
+      {/* ==================================================================== */}
+      {showCloudModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#1A1614] border-2 border-emerald-500/50 rounded-3xl max-w-lg w-full p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-black text-emerald-400">
+                ☁️ Pengaturan & Tes Sinyal Cloud Real-Time (Laptop ↔ HP)
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowCloudModal(false)}
+                className="w-8 h-8 rounded-full bg-stone-800 text-stone-300 font-black"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <label className="text-stone-400 block">Kode Ruangan Cloud Warkop (Harus Sama di Laptop & HP):</label>
+              <input
+                type="text"
+                value={cloudRoom}
+                onChange={(e) => setCloudRoom(e.target.value)}
+                className="w-full bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 font-black text-emerald-300"
+              />
+            </div>
+
+            {cloudTestResult && (
+              <div className="bg-stone-950 border border-emerald-500/40 rounded-xl p-3 text-xs text-emerald-300 font-bold">
+                {cloudTestResult}
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  const start = Date.now();
+                  await pushToCloud(false);
+                  const ms = Date.now() - start;
+                  const size = JSON.stringify(buildCompactCloudPacket()).length;
+                  setCloudTestResult(`✅ Sinyal Cloud Terhubung! Ukuran Paket: ${size} bytes (< 4KB aman) • Kecepatan: ${ms} ms`);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black"
+              >
+                ⚡ Tes Sinyal Cloud Sekarang
+              </button>
+              <button
+                type="button"
+                onClick={() => pullFromCloudNow(true)}
+                className="flex-1 py-2.5 rounded-xl bg-cyan-700 hover:bg-cyan-600 text-white text-xs font-black"
+              >
+                📥 Tarik Paksa dari Cloud
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* MODAL PAKET PWA & PANDUAN PASANG DI GITHUB                           */}
+      {/* ==================================================================== */}
+      {showPwaModal && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-[#1A1614] border-2 border-emerald-500/50 rounded-3xl max-w-3xl w-full p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base sm:text-lg font-black text-emerald-400">
+                📲 Paket Progressive Web App (PWA) Mandiri & Panduan GitHub
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowPwaModal(false)}
+                className="w-8 h-8 rounded-full bg-stone-800 text-stone-300 font-black"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="bg-stone-950 border border-cyan-500/40 rounded-2xl p-4 space-y-2 text-xs text-stone-300">
+              <h4 className="font-black text-cyan-300">
+                🐙 Langkah Cepat Pasang PWA di GitHub Anda:
+              </h4>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>
+                  Tempel kode utama ini ke <code>src/App.jsx</code> di repositori GitHub Anda.
+                </li>
+                <li>
+                  Buat file baru di GitHub bernama <code className="text-emerald-300 font-bold">public/manifest.json</code> lalu tempel isi Kotak #1 di bawah.
+                </li>
+                <li>
+                  Buat file baru di GitHub bernama <code className="text-cyan-300 font-bold">public/service-worker.js</code> lalu tempel isi Kotak #2 di bawah.
+                </li>
+                <li>
+                  Ganti isi file <code className="text-amber-300 font-bold">index.html</code> di GitHub dengan isi Kotak #3 di bawah.
+                </li>
+              </ol>
+            </div>
+
+            {/* 1. MANIFEST.JSON */}
+            <div className="bg-stone-900 border border-stone-800 rounded-2xl p-3.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-emerald-400">1. File: public/manifest.json</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(JSON.stringify(getManifestJsonObject(), null, 2));
+                    showToast('📋 Kode public/manifest.json berhasil disalin!');
+                  }}
+                  className="px-3 py-1 rounded-lg bg-emerald-600 text-white text-xs font-black"
+                >
+                  📋 Salin manifest.json
+                </button>
+              </div>
+              <pre className="text-[10px] bg-stone-950 p-2.5 rounded-xl overflow-x-auto text-stone-300 max-h-32">
+                {JSON.stringify(getManifestJsonObject(), null, 2)}
+              </pre>
+            </div>
+
+            {/* 2. SERVICE-WORKER.JS */}
+            <div className="bg-stone-900 border border-stone-800 rounded-2xl p-3.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-cyan-400">2. File: public/service-worker.js</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(SERVICE_WORKER_CODE);
+                    showToast('📋 Kode public/service-worker.js berhasil disalin!');
+                  }}
+                  className="px-3 py-1 rounded-lg bg-cyan-600 text-white text-xs font-black"
+                >
+                  📋 Salin service-worker.js
+                </button>
+              </div>
+              <pre className="text-[10px] bg-stone-950 p-2.5 rounded-xl overflow-x-auto text-stone-300 max-h-32">
+                {SERVICE_WORKER_CODE}
+              </pre>
+            </div>
+
+            {/* 3. INDEX.HTML */}
+            <div className="bg-stone-900 border border-stone-800 rounded-2xl p-3.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-amber-400">3. File: index.html</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(INDEX_HTML_PWA_TEMPLATE);
+                    showToast('📋 Kode index.html berhasil disalin!');
+                  }}
+                  className="px-3 py-1 rounded-lg bg-amber-500 text-stone-950 text-xs font-black"
+                >
+                  📋 Salin index.html
+                </button>
+              </div>
+              <pre className="text-[10px] bg-stone-950 p-2.5 rounded-xl overflow-x-auto text-stone-300 max-h-32">
+                {INDEX_HTML_PWA_TEMPLATE}
+              </pre>
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowPwaModal(false)}
+                className="px-5 py-2 rounded-xl bg-stone-800 text-stone-200 text-xs font-bold"
+              >
+                Tutup Jendela PWA
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
